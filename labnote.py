@@ -61,9 +61,9 @@ import docutils.core
 # - use os.path consequently
 
 # git integration
-#  - commit on file switch
-#  - add after new file saved
-#  - push before exit
+#  - commit on file switch (done)
+#  - add after new file saved (done)
+#  - push before exit (done)
 #  - get revision pdf export (done)
 
 class mainwindow():
@@ -348,19 +348,22 @@ class mainwindow():
 
                 self.state.set_label("saving...")
 
+                #
+                if self.git:
+                    if not os.path.exists(self.current_file):
+                        gitadd = True
+                    else:
+                        gitadd = False
+
                 filedir = os.path.dirname(self.current_file)
                 if filedir:
                     if not os.path.exists(filedir):
                         os.makedirs(filedir)
 
                 # write-replace (unix style)
-                rand = "".join(random.sample(string.ascii_lowercase, 5))
-
-                # TODO this is ugly
-                if filedir:
-                    tmpfile = filedir + "/." + os.path.basename(self.current_file) + "." + rand
-                else:
-                    tmpfile = "." + os.path.basename(self.current_file) + "." + rand
+                tmpfile = "." + os.path.basename(self.current_file) + ".swp"
+                tmpfile = os.path.join(filedir, *[tmpfile])
+                log.debug("tmpfile " + tmpfile)
 
                 try:
                     fd = os.open(tmpfile, os.O_WRONLY | os.O_CREAT| os.O_EXCL, 0o600)
@@ -373,6 +376,13 @@ class mainwindow():
 
                 self.tvbuffer.set_modified(False)
                 self.state.set_label("saved")
+
+                # git, add on new file saved
+                if self.git:
+                    if gitadd:
+                        log.debug("new file saved, going to add file")
+                        (ret, msg) = run(["git", "add", self.current_file])
+                        log.debug(msg)
 
                 return True
 
@@ -609,7 +619,7 @@ class mainwindow():
     def load_rst(self, uri, request):
         log.debug("load text")
 
-        # history
+        ## history
         if not self.history_ignore:
             if self.current_file:
                 try:
@@ -620,6 +630,16 @@ class mainwindow():
         else:
             self.history_ignore = False
         log.debug("history\n" + str(self.history_stack))
+
+
+        ## git, commit on file switch
+        if self.git:
+            if self.current_file:
+                log.debug("committing changes due to file switch")
+                # git commit --allow-empty-message -m '' foo.rst
+                (ret, msg) = run(["git", "commit", "--allow-empty-message", "-m", "", self.current_file])
+                log.debug(msg)
+
 
         self.current_file = uri
         log.debug("current file URI " + uri)
@@ -707,6 +727,18 @@ class mainwindow():
 
 
     def on_delete_event(self, widget, event):
+
+        self.shutdown()
+
+    def shutdown(self):
+
+        log.debug("exiting")
+
+        #
+        if self.git:
+            (ret, msg) = run(["git", "push"])
+            log.debug(msg)
+
         loop.quit()
 
 
@@ -823,16 +855,17 @@ def grep(pattern, dirpath):
 
 def run(cmd, stdin=None, cwd=None):
     # blocking!
-    # for non-blocking use: subprocess.call()
 
-    #proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         out, err = proc.communicate(input=stdin, timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
         (out, err) = proc.communicate()
-    return proc.returncode, out.decode().strip()
+    ret = out.decode().strip()
+    if not ret:
+        ret = err.decode().strip()
+    return proc.returncode, ret
 
 
 def git_get_rev(filename):
@@ -967,5 +1000,5 @@ if __name__ == "__main__":
 
         loop.run()
     except KeyboardInterrupt:
-        loop.quit()
+        window.shutdown()
 
