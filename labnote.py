@@ -56,6 +56,7 @@ import docutils.core
 # TODO
 # - GtkShortcutsWindow ???
 #  Ctrl+? and Ctrl+F1
+#  - menu + accels?
 # - config file handling
 # - stylesheet handling & paths
 # - use os.path consequently
@@ -459,8 +460,6 @@ class mainwindow():
 
             if event.keyval == ord("V"):
 
-                print("foo")
-
                 clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
                 text = clipboard.wait_for_text()
 
@@ -637,7 +636,8 @@ class mainwindow():
             if self.current_file:
                 log.debug("committing changes due to file switch")
                 # git commit --allow-empty-message -m '' foo.rst
-                (ret, msg) = run(["git", "commit", "--allow-empty-message", "-m", "", self.current_file])
+                #(ret, msg) = run(["git", "commit", "--allow-empty-message", "-m", "", self.current_file])
+                (ret, msg) = run(["git", "commit", "-a", "--allow-empty-message", "-m", ""])
                 log.debug(msg)
 
 
@@ -719,8 +719,9 @@ class mainwindow():
             for r in res:
                 self.search_results.append(r)
 
-            it = self.tvbuffer.get_iter_at_line(int(res[0][2]))
-            self.textview.scroll_to_iter(it, 0, False, 0.5, 0.5)
+            if res:
+                it = self.tvbuffer.get_iter_at_line(int(res[0][2]))
+                self.textview.scroll_to_iter(it, 0, False, 0.5, 0.5)
 
         self.webview.hide()
         self.search_results_sw.show()
@@ -736,8 +737,12 @@ class mainwindow():
 
         #
         if self.git:
-            (ret, msg) = run(["git", "push"])
+            (ret, msg) = run(["git", "ls-remote"])
             log.debug(msg)
+            # no remotes 128
+            if ret == 0:
+                (ret, msg) = run(["git", "push"])
+                log.debug(msg)
 
         loop.quit()
 
@@ -825,7 +830,7 @@ class mainwindow():
 
 
 def search(pattern, filepath):
-    r = re.compile(pattern)
+    r = re.compile(pattern, flags=re.IGNORECASE)
     res = []
     with open(filepath) as f:
         for (lineno, line) in enumerate(f):
@@ -835,7 +840,7 @@ def search(pattern, filepath):
 
 
 def grep(pattern, dirpath):
-    r = re.compile(pattern)
+    r = re.compile(pattern, flags=re.IGNORECASE)
     res = []
     for parent, dirs, files in os.walk(dirpath):
         for f in files:
