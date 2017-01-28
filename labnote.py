@@ -78,6 +78,7 @@ class mainwindow():
 
         self.load_state = 0
         self.ignore_modified = False
+        self.lock_line = 0
 
         self.current_file = ""
 
@@ -162,6 +163,7 @@ class mainwindow():
         #self.tvbuffer.connect("paste-done", self.tvbuffer_on_paste_done)
 
         self.textview.connect("button-release-event", self.on_button_event)
+        self.textview.connect("size-allocate", self.textview_on_size_allocate)
 
         scrolledwindow.add(self.textview)
 
@@ -209,9 +211,8 @@ class mainwindow():
         for i in range(len(columns)):
             cell = Gtk.CellRendererText()
             col = Gtk.TreeViewColumn(columns[i], cell, text=i)
-            if i == 1:
-                col.set_expand(True)
-            if i == 2:
+            col.set_sizing(Gtk.TreeViewColumnSizing.AUTOSIZE)
+            if i == 0:
                 col.set_alignment(1.0)
             self.treeview.append_column(col)
 
@@ -290,6 +291,11 @@ class mainwindow():
         print(textbuffer)
         print(clipboard)        
 
+    def textview_on_size_allocate(self, widget, allocation):
+
+        if self.lock_line:
+            it = self.tvbuffer.get_iter_at_line(self.lock_line)
+            self.textview.scroll_to_iter(it, 0, True, 0.0, 0.0)
 
     def info_box_button_ok_clicked(self, widget):
         self.tvbuffer.set_modified(False)
@@ -316,27 +322,38 @@ class mainwindow():
     def on_search_key(self, widget, event):
 
         if event.keyval == Gdk.KEY_Escape:
+            self.lock_line = 0
             self.searchr.set_reveal_child(False)
             self.search_results_sw.hide()
             self.webview.show()
 
 
+    # search result activated
     def on_search_result(self, treeview, it, path):
 
         selection = treeview.get_selection()
         (model, pathlist) = selection.get_selected_rows()
-        model = treeview.get_model()
-        for path in pathlist:
-            it = model.get_iter(path)
-        val = model.get_value(it, 0)
+        it = model.get_iter(pathlist[0])
+        res_file = model.get_value(it, 1)
+        res_line = int(model.get_value(it, 0)) - 1
+
 
         if self.search_mode == "global":
-            window.webview.load_uri("file://" + val)
+            # tvbuffer is updated by callback function below
 
-        #if self.search_mode == "local":
-        val = model.get_value(it, 2)
-        it_ = self.tvbuffer.get_iter_at_line(int(val))
-        self.textview.scroll_to_iter(it_, 0, False, 0.5, 0.5)
+            self.ignore_modified = True
+            self.lock_line = res_line
+
+            window.webview.load_uri("file://" + res_file)
+
+        if self.search_mode == "local":
+            it_ = self.tvbuffer.get_iter_at_line(res_line)
+            self.textview.scroll_to_iter(it_, 0, True, 0.0, 0.0)
+
+            self.ignore_modified = True
+            self.lock_line = res_line
+
+            window.webview.load_uri("file://" + self.current_file)
 
 
     def on_key_press_event(self, widget, event):
@@ -692,14 +709,18 @@ class mainwindow():
             del self.history_stack[-1]
 
 
+    # load file (location bar)
     def on_entry_act(self, entry):
         self.webview.load_uri("file://" + entry.get_text())
 
 
+    # starting search
     def on_search(self, entry):
         pattern = entry.get_text()
         if not pattern:
             return
+
+        self.search_results.clear()
 
         if self.search_mode == "global":
             #path = os.path.dirname(self.current_file)
@@ -708,20 +729,18 @@ class mainwindow():
             #res = grep(pattern, path)
             res = grep(pattern, startdir)
 
-            self.search_results.clear()
             for r in res:
                 self.search_results.append(r)
 
         if self.search_mode == "local":
             res = search(pattern, self.current_file)
 
-            self.search_results.clear()
             for r in res:
                 self.search_results.append(r)
 
             if res:
-                it = self.tvbuffer.get_iter_at_line(int(res[0][2]))
-                self.textview.scroll_to_iter(it, 0, False, 0.5, 0.5)
+                it = self.tvbuffer.get_iter_at_line(int(res[0][0])-1)
+                self.textview.scroll_to_iter(it, 0, True, 0.0, 0.0)
 
         self.webview.hide()
         self.search_results_sw.show()
@@ -762,13 +781,16 @@ class mainwindow():
                     'embed_stylesheet': True
                 }
 
-        if lock:
+        if lock or self.lock_line:
             # get current line
             cursor_mark = self.tvbuffer.get_insert()
             cursor_iter = self.tvbuffer.get_iter_at_mark(cursor_mark)
             line = cursor_iter.get_line()
             if not line:
                 line = 0
+
+            if self.lock_line:
+                line = self.lock_line
 
             mark = "<a id='btj0m1ve'></a>"
             node_mark = docutils.nodes.raw(mark, mark, format="html")
@@ -780,7 +802,7 @@ class mainwindow():
             except docutils.utils.SystemMessage as e:
                 return "<body>Error<br>" + str(e) + "</body>"
 
-        if lock:
+        if lock or self.lock_line:
             prev = []
             for elem in dtree.traverse(siblings=True):
                 if elem.line:
@@ -810,7 +832,7 @@ class mainwindow():
             except docutils.utils.SystemMessage as e:
                 html = "<body>Error<br>" + str(e) + "</body>"
 
-        if lock:
+        if lock or self.lock_line:
             body = '<body onload="scroll()">'
             html = re.sub(r'<body>', body, html, re.M)
 
@@ -835,7 +857,7 @@ def search(pattern, filepath):
     with open(filepath) as f:
         for (lineno, line) in enumerate(f):
             if r.search(line):
-                res.append([line.strip(), "", str(lineno)])
+                res.append([str(lineno+1), "", line.strip()])
     return res
 
 
@@ -854,7 +876,7 @@ def grep(pattern, dirpath):
                             filepath = filepath.replace(startdir, "", 1)
                             if filepath[0] == "/":
                                 filepath = filepath[1:]
-                            res.append([filepath, line.strip(), str(lineno)])
+                            res.append([str(lineno+1), filepath, line.strip()])
     return res
 
 
