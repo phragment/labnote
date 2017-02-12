@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright © 2016 Thomas Krug
+# Copyright 2016 Thomas Krug
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -433,7 +433,8 @@ class mainwindow():
                     rev = ""
                 dt = datetime.datetime.now().strftime("%Y-%m-%d")
 
-                preamble  = "\\usepackage{parskip}\n"
+                preamble  = "\\usepackage[cm]{fullpage}\n"
+                preamble += "\\usepackage{parskip}\n"
                 preamble += "\\usepackage{lmodern}\n"
                 preamble += "\\usepackage{fancyhdr}\n"
                 preamble += "\\fancyhf{}\n"
@@ -470,7 +471,7 @@ class mainwindow():
                         (ret, out) = run(["pdflatex", "-halt-on-error", "-output-directory", tmpdir, "labnote.tex"])
                     run(["mv", "labnote.pdf", "/tmp/"], cwd=tmpdir)
                     # debug
-                    #run(["mv", "labnote.", "/tmp/"], cwd=tmpdir)
+                    #run(["mv", "labnote.tex", "/tmp/"], cwd=tmpdir)
                 subprocess.call(["xdg-open", "/tmp/labnote.pdf"])
                 log.debug("export done")
                 return True
@@ -705,7 +706,8 @@ class mainwindow():
     def go_back(self, widget=None):
         if len(self.history_stack):
             self.history_ignore = True
-            self.webview.load_uri("file://" + self.history_stack[-1])
+            #self.webview.load_uri("file://" + self.history_stack[-1])
+            self.webview.load_uri("file://dummy.rst/" + self.history_stack[-1])
             del self.history_stack[-1]
 
 
