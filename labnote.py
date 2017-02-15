@@ -433,7 +433,7 @@ class mainwindow():
                     rev = ""
                 dt = datetime.datetime.now().strftime("%Y-%m-%d")
 
-                preamble  = "\\usepackage[cm]{fullpage}\n"
+                preamble  = "\\usepackage[margin=1.5cm,includeheadfoot]{geometry}\n"
                 preamble += "\\usepackage{parskip}\n"
                 preamble += "\\usepackage{lmodern}\n"
                 preamble += "\\usepackage{fancyhdr}\n"
@@ -755,6 +755,10 @@ class mainwindow():
     def shutdown(self):
 
         log.debug("exiting")
+
+        # TODO call try_close and wait for close signal
+        self.webview.try_close()
+        time.sleep(1)
 
         #
         if self.git:
