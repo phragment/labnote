@@ -433,7 +433,6 @@ class mainwindow():
                     rev = ""
                 dt = datetime.datetime.now().strftime("%Y-%m-%d")
 
-                #preamble  = "\\usepackage[margin=1.5cm,includeheadfoot]{geometry}\n"
                 preamble  = "\\usepackage[left=2cm,right=1cm,top=1.5cm,bottom=1.5cm,includeheadfoot]{geometry}\n"
                 preamble += "\\usepackage{parskip}\n"
                 preamble += "\\usepackage{lmodern}\n"
@@ -446,6 +445,7 @@ class mainwindow():
                 preamble += "\\pagestyle{fancy}\n"
                 preamble += "\\makeatletter\n"
                 preamble += "\\let\\ps@plain\\ps@fancy\n"
+                preamble += "\\usepackage[pdftex]{graphicx}\n"
                 preamble += "\\setkeys{Gin}{width=0.8\\textwidth,height=0.3\\textheight,keepaspectratio}\n"
 
                 args = {"latex_preamble": preamble}
@@ -472,6 +472,7 @@ class mainwindow():
                     if ret != 0:
                         log.error("latex failed")
                         log.debug(out)
+                        print(out)
                         return True
                     if "Rerun" in out or "rerunfilecheck" in out:
                         log.debug("second latex run")
