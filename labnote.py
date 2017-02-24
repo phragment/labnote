@@ -433,7 +433,8 @@ class mainwindow():
                     rev = ""
                 dt = datetime.datetime.now().strftime("%Y-%m-%d")
 
-                preamble  = "\\usepackage[margin=1.5cm,includeheadfoot]{geometry}\n"
+                #preamble  = "\\usepackage[margin=1.5cm,includeheadfoot]{geometry}\n"
+                preamble  = "\\usepackage[left=2cm,right=1cm,top=1.5cm,bottom=1.5cm,includeheadfoot]{geometry}\n"
                 preamble += "\\usepackage{parskip}\n"
                 preamble += "\\usepackage{lmodern}\n"
                 preamble += "\\usepackage{fancyhdr}\n"
@@ -445,6 +446,7 @@ class mainwindow():
                 preamble += "\\pagestyle{fancy}\n"
                 preamble += "\\makeatletter\n"
                 preamble += "\\let\\ps@plain\\ps@fancy\n"
+                preamble += "\\setkeys{Gin}{width=0.8\\textwidth,height=0.3\\textheight,keepaspectratio}\n"
 
                 args = {"latex_preamble": preamble}
 
@@ -459,19 +461,25 @@ class mainwindow():
                     return True
                 latex = latex.decode()
                 with tempfile.TemporaryDirectory(prefix="labnote-") as tmpdir:
+                    # copy whole current dir contents to tmpdir, kind of hacky
+                    curdir = os.path.dirname(self.current_file)
+                    curdir = os.path.join(startdir, curdir)
+                    run(["bash", "-c", "cp " + curdir + "/* " + tmpdir])
+
                     with open(os.path.join(tmpdir, "labnote.tex"), "w") as f:
                         f.write(latex)
-                    (ret, out) = run(["pdflatex", "-halt-on-error", "-output-directory", tmpdir, "labnote.tex"])
+                    (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
                     if ret != 0:
                         log.error("latex failed")
                         log.debug(out)
                         return True
                     if "Rerun" in out or "rerunfilecheck" in out:
                         log.debug("second latex run")
-                        (ret, out) = run(["pdflatex", "-halt-on-error", "-output-directory", tmpdir, "labnote.tex"])
+                        (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
                     run(["mv", "labnote.pdf", "/tmp/"], cwd=tmpdir)
                     # debug
                     #run(["mv", "labnote.tex", "/tmp/"], cwd=tmpdir)
+
                 subprocess.call(["xdg-open", "/tmp/labnote.pdf"])
                 log.debug("export done")
                 return True
