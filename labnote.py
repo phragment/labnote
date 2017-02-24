@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2016 Thomas Krug
+# Copyright 2016-2017 Thomas Krug
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -756,9 +756,7 @@ class mainwindow():
 
         log.debug("exiting")
 
-        # TODO call try_close and wait for close signal
-        self.webview.try_close()
-        time.sleep(1)
+        self.webview.run_javascript("window.close()", None, None)
 
         #
         if self.git:
