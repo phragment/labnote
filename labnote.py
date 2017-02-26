@@ -148,13 +148,11 @@ class mainwindow():
         # sourceview
         self.textview = GtkSource.View()
         self.textview.modify_font(Pango.FontDescription("DejaVu Sans Mono Book 10"))
-        #self.textview.set_tab_width(2)
-        self.textview.set_tab_width(4)
+        self.textview.set_tab_width(2)
+        self.textview.set_insert_spaces_instead_of_tabs(True)
         self.textview.set_show_line_numbers(True)
         self.textview.set_auto_indent(True)
         self.textview.set_smart_home_end(True)
-        #self.textview.set_smart_backspace(True)
-        #self.textview.set_insert_spaces_instead_of_tabs(True)
         self.tvbuffer = self.textview.get_buffer()
         self.tvbuffer.props.language = GtkSource.LanguageManager.get_default().get_language('rst')
         self.tvbuffer.props.style_scheme = GtkSource.StyleSchemeManager.get_default().get_scheme(source_view_scheme)
@@ -170,20 +168,24 @@ class mainwindow():
 
         hbox2 = Gtk.HBox(True, 0)
 
-        #self.webview = WebKit2.WebView()
-
-        #settings = self.webview.get_settings()
         settings = WebKit2.Settings()
-
         settings.set_enable_javascript(True)
 
+        #
         settings.set_enable_java(False)
+        # flash, pipelight, etc.
         settings.set_enable_plugins(False)
-        settings.set_enable_html5_database(False)
-        settings.set_enable_html5_local_storage(False)
-        settings.set_enable_offline_web_application_cache(False)
         settings.set_enable_page_cache(False)
+        #
+        settings.set_enable_webaudio(False)
         settings.set_enable_webgl(False)
+        # "MediaStream is an experimental proposal for allowing
+        # web pages to access audio and video devices for capture."
+        settings.set_enable_media_stream(False)
+        # "MediaSource is an experimental proposal which extends
+        # HTMLMediaElement to allow JavaScript to generate media
+        # streams for playback."
+        settings.set_enable_mediasource(False)
 
         settings.set_default_font_family("DejaVu Sans")
         settings.set_default_font_size(14)
@@ -193,6 +195,8 @@ class mainwindow():
 
         context = self.webview.get_context()
         context.register_uri_scheme("file", self.uri_scheme_file)
+        context.set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
+        context.clear_cache()
 
         self.webview.connect("decide-policy", self.load_policy)
         self.webview.connect("context-menu", self.disable_context_menu)
