@@ -54,6 +54,10 @@ import docutils
 import docutils.core
 
 # TODO
+# - image pasting
+# - x11 paste on cursor not pointer
+#   - button-press-event on textview? (middle button is 2)
+#
 # - GtkShortcutsWindow ???
 #  Ctrl+? and Ctrl+F1
 #  - menu + accels?
@@ -156,9 +160,6 @@ class mainwindow():
         self.tvbuffer = self.textview.get_buffer()
         self.tvbuffer.props.language = GtkSource.LanguageManager.get_default().get_language('rst')
         self.tvbuffer.props.style_scheme = GtkSource.StyleSchemeManager.get_default().get_scheme(source_view_scheme)
-
-        #self.tvbuffer.connect("insert-text", self.tvbuffer_on_insert_text)
-        #self.tvbuffer.connect("paste-done", self.tvbuffer_on_paste_done)
 
         self.textview.connect("button-release-event", self.on_button_event)
         self.textview.connect("size-allocate", self.textview_on_size_allocate)
@@ -283,18 +284,6 @@ class mainwindow():
         self.textview.grab_focus()
 
 
-    def tvbuffer_on_insert_text(self, textbuffer, textiter, text, length):
-
-        print(textbuffer)
-        print(textiter)
-        print(text)
-        print(length)
-
-    def tvbuffer_on_paste_done(self, textbuffer, clipboard):
-
-        print(textbuffer)
-        print(clipboard)        
-
     def textview_on_size_allocate(self, widget, allocation):
 
         if self.lock_line:
@@ -312,13 +301,14 @@ class mainwindow():
 
 
     def on_button_event(self, widget, event):
-        (foo, button) = event.get_button()
+        (ok, button) = event.get_button()
 
         if button == 8:
             self.go_back()
             return True
         if button == 9:
-            pass
+            #self.go_forward()
+            return True
 
         return False
 
@@ -476,7 +466,6 @@ class mainwindow():
                     if ret != 0:
                         log.error("latex failed")
                         log.debug(out)
-                        print(out)
                         return True
                     if "Rerun" in out or "rerunfilecheck" in out:
                         log.debug("second latex run")
