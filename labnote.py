@@ -54,7 +54,9 @@ import docutils
 import docutils.core
 
 # TODO
-# - shift-v pasting doesnt delete marked text
+# - middle click paste (primary selection)
+#  should not paste at cursor, but at pointer location
+#  but only if selection comes from self
 #
 # - GtkShortcutsWindow ???
 #  Ctrl+? and Ctrl+F1
@@ -503,6 +505,10 @@ class mainwindow():
                 for line in text.splitlines():
                     text_ += "  " + line + "\n"
 
+                sel = self.tvbuffer.get_selection_bounds()
+                if sel:
+                    self.tvbuffer.delete(sel[0], sel[1])
+
                 self.tvbuffer.insert_at_cursor(text_)
 
                 return True
@@ -526,6 +532,10 @@ class mainwindow():
                         break
 
                     img.savev(imgpath, "png", [None], [None])
+
+                    sel = self.tvbuffer.get_selection_bounds()
+                    if sel:
+                        self.tvbuffer.delete(sel[0], sel[1])
 
                     self.tvbuffer.insert_at_cursor("\n.. image:: " + imgname + "\n   :target: " + imgname + "\n")
 
