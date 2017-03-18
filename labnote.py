@@ -54,10 +54,6 @@ import docutils
 import docutils.core
 
 # TODO
-# - middle click paste (primary selection)
-#  should not paste at cursor, but at pointer location
-#  but only if selection comes from self
-#
 # - GtkShortcutsWindow ???
 #  Ctrl+? and Ctrl+F1
 #  - menu + accels?
@@ -319,6 +315,9 @@ class mainwindow():
             return True
 
         if button == Gdk.BUTTON_MIDDLE:
+            if self.tvbuffer.get_selection_bounds():
+                return False
+
             if self.primary_selection.wait_is_text_available():
                 txt = self.primary_selection.wait_for_text()
                 if txt:
