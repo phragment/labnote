@@ -54,9 +54,7 @@ import docutils
 import docutils.core
 
 # TODO
-# - image pasting
-# - x11 paste on cursor not pointer
-#   - button-press-event on textview? (middle button is 2)
+# - shift-v pasting doesnt delete marked text
 #
 # - GtkShortcutsWindow ???
 #  Ctrl+? and Ctrl+F1
@@ -90,10 +88,12 @@ class mainwindow():
         self.history_stack = []
         self.history_ignore = False
 
+        self.extern = ["http", "https", "ftp", "ftps", "mailto"]
+
 
         self.window = Gtk.Window()
         self.window.connect("delete-event", self.on_delete_event)
-        self.window.connect("key-press-event", self.on_key_press_event)
+        self.window.connect("key-press-event", self.window_on_key_press)
         self.window.set_title("LabNote")
         self.window.set_wmclass("default", "LabNote")
 
@@ -149,7 +149,7 @@ class mainwindow():
         scrolledwindow = Gtk.ScrolledWindow()
         scrolledwindow.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
 
-        # sourceview
+        ## SourceView
         self.textview = GtkSource.View()
         self.textview.modify_font(Pango.FontDescription("DejaVu Sans Mono Book 10"))
         self.textview.set_tab_width(2)
@@ -161,7 +161,7 @@ class mainwindow():
         self.tvbuffer.props.language = GtkSource.LanguageManager.get_default().get_language('rst')
         self.tvbuffer.props.style_scheme = GtkSource.StyleSchemeManager.get_default().get_scheme(source_view_scheme)
 
-        self.textview.connect("button-release-event", self.on_button_event)
+        self.textview.connect("button-press-event", self.on_button_press)
         self.textview.connect("size-allocate", self.textview_on_size_allocate)
 
         scrolledwindow.add(self.textview)
@@ -169,6 +169,7 @@ class mainwindow():
 
         hbox2 = Gtk.HBox(True, 0)
 
+        ## WebKit
         settings = WebKit2.Settings()
         settings.set_enable_javascript(True)
 
@@ -196,13 +197,15 @@ class mainwindow():
 
         context = self.webview.get_context()
         context.register_uri_scheme("file", self.uri_scheme_file)
+        for scheme in self.extern:
+            context.register_uri_scheme(scheme, self.uri_scheme_deny)
         context.set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
         context.clear_cache()
 
         self.webview.connect("decide-policy", self.load_policy)
         self.webview.connect("context-menu", self.disable_context_menu)
         self.webview.connect("load-changed", self.load_changed)
-        self.webview.connect("button-release-event", self.on_button_event)
+        self.webview.connect("button-press-event", self.on_button_press)
         # debug
         self.webview.connect("load-failed", self.load_failed)
 
@@ -278,6 +281,9 @@ class mainwindow():
 
         self.textview.get_buffer().connect("changed", self.buffer_changed)
 
+        self.clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        self.primary_selection = Gtk.Clipboard.get(Gdk.SELECTION_PRIMARY)
+
         vbox.show_all()
         self.window.show()
         self.search_results_sw.hide()
@@ -300,7 +306,7 @@ class mainwindow():
         self.info.set_reveal_child(False)
 
 
-    def on_button_event(self, widget, event):
+    def on_button_press(self, widget, event):
         (ok, button) = event.get_button()
 
         if button == 8:
@@ -309,6 +315,13 @@ class mainwindow():
         if button == 9:
             #self.go_forward()
             return True
+
+        if button == Gdk.BUTTON_MIDDLE:
+            if self.primary_selection.wait_is_text_available():
+                txt = self.primary_selection.wait_for_text()
+                if txt:
+                    self.tvbuffer.insert_at_cursor(txt)
+                    return True
 
         return False
 
@@ -350,7 +363,7 @@ class mainwindow():
             window.webview.load_uri("file://" + self.current_file)
 
 
-    def on_key_press_event(self, widget, event):
+    def window_on_key_press(self, widget, event):
 
         # Ctrl
         #if event.state == Gdk.ModifierType.CONTROL_MASK:
@@ -494,6 +507,30 @@ class mainwindow():
 
                 return True
 
+            if event.keyval == ord("v"):
+                if self.clipboard.wait_is_image_available():
+                    img = self.clipboard.wait_for_image()
+                    if not img:
+                        return False
+
+                    current_dir = os.path.dirname(self.current_file)
+                    while True:
+                        imgname = "".join(random.choice(string.ascii_lowercase + string.digits) for i in range(12))
+                        imgname += ".png"
+                        imgpath = os.path.join(current_dir, imgname)
+                        try:
+                            imgfd = os.open(imgpath, os.O_CREAT | os.O_EXCL)
+                        except FileExistsError:
+                            continue
+                        os.close(imgfd)
+                        break
+
+                    img.savev(imgpath, "png", [None], [None])
+
+                    self.tvbuffer.insert_at_cursor("\n.. image:: " + imgname + "\n   :target: " + imgname + "\n")
+
+                    return True
+
         # Alt
         #if event.state == Gdk.ModifierType.MOD1_MASK:
         if event.state & Gdk.ModifierType.MOD1_MASK:
@@ -535,17 +572,28 @@ class mainwindow():
 
 
     def load_policy(self, webview, decision, decision_type):
+        if decision_type == WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
+            log.debug("navigation policy for: " + decision.get_request().get_uri())
+        if decision_type == WebKit2.PolicyDecisionType.RESPONSE:
+            log.debug("response policy for: " + decision.get_request().get_uri())
+
         uri = urlparse( decision.get_request().get_uri() )
 
         if not uri.scheme == "file":
             decision.ignore()
 
-        extern = ["http", "https", "ftp", "ftps", "mailto"]
-
-        if uri.scheme in extern:
-            subprocess.call(["/usr/bin/xdg-open", uri.geturl()])
+            if uri.scheme in self.extern:
+                subprocess.call(["/usr/bin/xdg-open", uri.geturl()])
 
         return True
+
+
+    def uri_scheme_deny(self, request):
+
+        # this is not called!
+        log.debug("uri scheme denied " + request.get_uri())
+        err = GLib.Error("load cancelled: extern")
+        request.finish_error(err)
 
 
     def uri_scheme_file(self, request):
@@ -1029,7 +1077,8 @@ if __name__ == "__main__":
         window = mainwindow(source_view_scheme, stylesheet, right_side_editor, git)
 
         window.history_home = startfile
-        window.webview.load_uri("file://" + startfile)
+        #window.webview.load_uri("file://" + startfile)
+        window.webview.load_uri("file://dummy.rst/" + startfile)
 
         loop.run()
     except KeyboardInterrupt:
