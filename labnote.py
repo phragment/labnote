@@ -35,13 +35,22 @@ import urllib
 import urllib.request
 from urllib.parse import urlparse
 
+# Debian Jessie
+#   python3-gi
+#   gir1.2-webkit2-3.0
+#   gir1.2-gtksource-3.0
+#   python3-docutils
+
 # python-gobject
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import GObject, Gtk, Pango, Gdk, GdkPixbuf, GLib, Gio
 
 # webkit2gtk
-gi.require_version('WebKit2', '4.0')
+try:
+    gi.require_version('WebKit2', '4.0')
+except ValueError:
+    gi.require_version('WebKit2', '3.0')
 from gi.repository import WebKit2
 
 # gtksourceview3
@@ -168,7 +177,9 @@ class mainwindow():
         hbox2 = Gtk.HBox(True, 0)
 
         ## WebKit
-        settings = WebKit2.Settings()
+        self.webview = WebKit2.WebView()
+
+        settings = self.webview.get_settings()
         settings.set_enable_javascript(True)
 
         #
@@ -191,7 +202,6 @@ class mainwindow():
         settings.set_default_font_size(14)
         settings.set_minimum_font_size(12)
 
-        self.webview = WebKit2.WebView.new_with_settings(settings)
 
         context = self.webview.get_context()
         context.register_uri_scheme("file", self.uri_scheme_file)
@@ -859,7 +869,7 @@ class mainwindow():
             node_mark = docutils.nodes.raw(mark, mark, format="html")
 
         null = io.StringIO()
-        with contextlib.redirect_stderr(null):
+        with contextlib.redirect_stdout(null):
             try:
                 dtree = docutils.core.publish_doctree(rst)
             except docutils.utils.SystemMessage as e:
@@ -888,7 +898,7 @@ class mainwindow():
                 with open("/tmp/labnote.dtree", "w") as f:
                     f.write(pretty.decode())
 
-        with contextlib.redirect_stderr(null):
+        with contextlib.redirect_stdout(null):
             try:
                 html = docutils.core.publish_from_doctree(dtree, writer_name="html4css1", settings=None, settings_overrides=args)
                 html = html.decode()
