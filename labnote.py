@@ -17,7 +17,6 @@
 
 import argparse
 import configparser
-import contextlib
 import datetime
 import io
 import logging
@@ -533,6 +532,7 @@ class mainwindow():
                         imgname = "".join(random.choice(string.ascii_lowercase + string.digits) for i in range(12))
                         imgname += ".png"
                         imgpath = os.path.join(current_dir, imgname)
+                        # TODO this fails on new dir
                         try:
                             imgfd = os.open(imgpath, os.O_CREAT | os.O_EXCL)
                         except FileExistsError:
@@ -868,8 +868,7 @@ class mainwindow():
             mark = "<a id='btj0m1ve'></a>"
             node_mark = docutils.nodes.raw(mark, mark, format="html")
 
-        null = io.StringIO()
-        with contextlib.redirect_stdout(null):
+        with devnull():
             try:
                 dtree = docutils.core.publish_doctree(rst)
             except docutils.utils.SystemMessage as e:
@@ -898,7 +897,7 @@ class mainwindow():
                 with open("/tmp/labnote.dtree", "w") as f:
                     f.write(pretty.decode())
 
-        with contextlib.redirect_stdout(null):
+        with devnull():
             try:
                 html = docutils.core.publish_from_doctree(dtree, writer_name="html4css1", settings=None, settings_overrides=args)
                 html = html.decode()
@@ -1009,6 +1008,19 @@ def handle_spaces(rstin):
             line = fuck
         rstout += line + "\n"
     return rstout
+
+
+class devnull():
+    def __init__(self):
+        self.devnull = io.StringIO()
+
+    def __enter__(self):
+        sys.stdout = self.devnull
+        sys.stderr = self.devnull
+
+    def __exit__(self, type, value, traceback):
+        sys.stdout = sys.__stdout__
+        sys.stderr = sys.__stderr__
 
 
 if __name__ == "__main__":
