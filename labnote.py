@@ -1029,8 +1029,8 @@ if __name__ == "__main__":
     rechar = u"\u02FD"
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--verbose", action='store_true')
-    parser.add_argument("path", nargs=1)
+    parser.add_argument("-v", "--verbose", action="count")
+    parser.add_argument("path", nargs="?", default="~/notes/index.rst")
     args = parser.parse_args()
 
     global log
@@ -1079,14 +1079,16 @@ if __name__ == "__main__":
         stylesheet = configpath_ + "/labnote/" + stylesheet
 
 
-    start = args.path[0]
+    start = os.path.expanduser(args.path)
     log.debug("startpath " + start)
 
     mimetypes.init()
 
+    # this adds cwd!
     start = os.path.abspath(start)
     global startdir
     startdir = os.path.dirname(start)
+    log.debug("startdir " + startdir)
     os.chdir(startdir)
     startfile = os.path.basename(start)
 
