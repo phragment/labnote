@@ -561,7 +561,7 @@ class mainwindow():
 
             if event.keyval == Gdk.KEY_Up:
                 log.debug("go home")
-                window.webview.load_uri("file://" + self.history_home)
+                window.webview.load_uri("file://dummy.rst/" + self.history_home)
                 return True
 
         return False
@@ -615,6 +615,22 @@ class mainwindow():
         request.finish_error(err)
 
 
+    def sane(self, uri):
+
+        uri = uri[7:]
+        if uri.endswith("/"):
+            uri = uri[:-1]
+
+        local = False
+        uri_ = uri.split("/")
+        if len(uri_) > 1:
+            if uri_[0].endswith(".rst"):
+                uri_ = uri_[1:]
+                local = True
+        uri = "/".join(uri_)
+
+        return uri, local
+
     def uri_scheme_file(self, request):
         #self.state.set_label("loading")
 
@@ -624,36 +640,14 @@ class mainwindow():
         log.debug("URI " + uri)
         log.debug("state " + str(self.load_state))
 
-        path_ = request.get_path()
-        log.debug("path " + path_)
-
         # handle spaces in links
         uri = urllib.request.unquote(uri)
         uri = uri.replace(rechar, " ")
 
-        ## sanitize
-        # remove file://
-        uri = uri[7:]
-        # normalize
-        uri = os.path.normpath(uri)
-        log.debug("URI " + uri)
+        (uri, local) = self.sane(uri)
+        log.debug("URI " + uri + " " + str(local))
 
-        # index.rst/rst/demo.rst
-        # index.rst/rst/images/biohazard.png
-
-        # is there a better solution?
-        uri_ = uri.split("/")
-        if len(uri_) > 1:
-            if ".rst" in uri_[0]:
-                # file://index.rst/rst/images/biohazard.png
-                uri = "/".join(uri_[1:])
-            else:
-                # file://rst/images/biohazard.png
-                log.error("file URLs are buggy")
-        log.debug("URI " + uri)
-
-
-        if uri.endswith(".rst"):
+        if self.load_state == 0 and uri.endswith(".rst") and local:
 
             if self.tvbuffer.get_modified() and not self.ignore_modified:
                 log.debug("cancel due to modified")
@@ -680,7 +674,7 @@ class mainwindow():
         if self.load_state == 0:
             self.open_file(uri, request)
 
-            err = GLib.Error("load cancelled: file opened externally")
+            err = GLib.Error("load cancelled: opening file externally")
             request.finish_error(err)
 
             return
@@ -765,7 +759,7 @@ class mainwindow():
         html = self.render(rst, lock=True)
 
         base = os.path.basename(self.current_file) + "/" + os.path.dirname(self.current_file)
-        base = os.path.normpath(base)
+        #base = os.path.normpath(base)
         base = "file://" + base + "/"
         log.debug("base " + base)
         self.ignore_modified = True
