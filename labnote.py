@@ -359,14 +359,13 @@ class mainwindow():
         res_file = model.get_value(it, 1)
         res_line = int(model.get_value(it, 0)) - 1
 
-        # TODO check load uri
         if self.search_mode == "global":
             # tvbuffer is updated by callback function below
 
             self.ignore_modified = True
             self.lock_line = res_line
 
-            window.webview.load_uri("file://" + res_file)
+            self.load_uri(res_file)
 
         if self.search_mode == "local":
             it_ = self.tvbuffer.get_iter_at_line(res_line)
@@ -375,7 +374,7 @@ class mainwindow():
             self.ignore_modified = True
             self.lock_line = res_line
 
-            window.webview.load_uri("file://" + self.current_file)
+            self.load_uri(self.current_file)
 
 
     def window_on_key_press(self, widget, event):
@@ -567,10 +566,14 @@ class mainwindow():
 
             if event.keyval == Gdk.KEY_Up:
                 log.debug("go home")
-                window.webview.load_uri("file://dummy.rst/" + self.history_home)
+                self.load_uri(self.history_home)
                 return True
 
         return False
+
+
+    def load_uri(self, uri):
+        self.webview.load_uri("file://dummy.rst/" + uri)
 
 
     def load_failed(self, view, event, failing_uri, error):
@@ -775,15 +778,13 @@ class mainwindow():
     def go_back(self, widget=None):
         if len(self.history_stack):
             self.history_ignore = True
-            #self.webview.load_uri("file://" + self.history_stack[-1])
-            self.webview.load_uri("file://dummy.rst/" + self.history_stack[-1])
+            self.load_uri(self.history_stack[-1])
             del self.history_stack[-1]
 
 
     # load file (location bar)
     def on_entry_act(self, entry):
-        # TODO
-        self.webview.load_uri("file://" + entry.get_text())
+        self.load_uri(entry.get_text())
 
 
     # starting search
@@ -1111,8 +1112,7 @@ if __name__ == "__main__":
         window = mainwindow(source_view_scheme, stylesheet, right_side_editor, git)
 
         window.history_home = startfile
-        #window.webview.load_uri("file://" + startfile)
-        window.webview.load_uri("file://dummy.rst/" + startfile)
+        window.load_uri(startfile)
 
         loop.run()
     except KeyboardInterrupt:
