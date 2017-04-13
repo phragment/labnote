@@ -323,10 +323,15 @@ class mainwindow():
             #self.go_forward()
             return True
 
+        # handle pasting of primary selection
         if button == Gdk.BUTTON_MIDDLE:
             if self.tvbuffer.get_selection_bounds():
+                # if the selection comes from us
+                # we paste it at pointer location
                 return False
 
+            # if the selection does not come from us
+            # we paste put it at cursor location
             if self.primary_selection.wait_is_text_available():
                 txt = self.primary_selection.wait_for_text()
                 if txt:
@@ -354,7 +359,7 @@ class mainwindow():
         res_file = model.get_value(it, 1)
         res_line = int(model.get_value(it, 0)) - 1
 
-
+        # TODO check load uri
         if self.search_mode == "global":
             # tvbuffer is updated by callback function below
 
@@ -376,7 +381,6 @@ class mainwindow():
     def window_on_key_press(self, widget, event):
 
         # Ctrl
-        #if event.state == Gdk.ModifierType.CONTROL_MASK:
         if event.state & Gdk.ModifierType.CONTROL_MASK:
             if event.keyval == ord("s"):
                 log.debug("saving " + self.current_file)
@@ -431,9 +435,7 @@ class mainwindow():
                 # this should wait for revealer animation to finish
                 self.search.grab_focus()
 
-        # Ctrl Shift
-        #if event.state == (Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK):
-
+            # Ctrl Shift
             if event.keyval == ord("F"):
                 self.search_mode = "global"
                 self.search.set_placeholder_text("search over files")
@@ -522,17 +524,22 @@ class mainwindow():
                 return True
 
             if event.keyval == ord("v"):
+                # handling of clipboard pasting
                 if self.clipboard.wait_is_image_available():
+                    # only interact if its an image
                     img = self.clipboard.wait_for_image()
                     if not img:
                         return False
 
                     current_dir = os.path.dirname(self.current_file)
+                    if current_dir:
+                        if not os.path.exists(current_dir):
+                            os.makedirs(current_dir)
+
                     while True:
                         imgname = "".join(random.choice(string.ascii_lowercase + string.digits) for i in range(12))
                         imgname += ".png"
                         imgpath = os.path.join(current_dir, imgname)
-                        # TODO this fails on new dir
                         try:
                             imgfd = os.open(imgpath, os.O_CREAT | os.O_EXCL)
                         except FileExistsError:
@@ -551,7 +558,6 @@ class mainwindow():
                     return True
 
         # Alt
-        #if event.state == Gdk.ModifierType.MOD1_MASK:
         if event.state & Gdk.ModifierType.MOD1_MASK:
 
             if event.keyval == Gdk.KEY_Left:
@@ -776,6 +782,7 @@ class mainwindow():
 
     # load file (location bar)
     def on_entry_act(self, entry):
+        # TODO
         self.webview.load_uri("file://" + entry.get_text())
 
 
