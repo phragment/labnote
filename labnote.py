@@ -157,7 +157,8 @@ class mainwindow():
 
         ## SourceView
         self.textview = GtkSource.View()
-        self.textview.modify_font(Pango.FontDescription("DejaVu Sans Mono Book 10"))
+        #self.textview.modify_font(Pango.FontDescription("DejaVu Sans Mono Book 10"))
+        self.textview.modify_font(Pango.FontDescription("Liberation Mono 10"))
         self.textview.set_tab_width(2)
         self.textview.set_insert_spaces_instead_of_tabs(True)
         self.textview.set_show_line_numbers(True)
@@ -198,6 +199,8 @@ class mainwindow():
         settings.set_enable_mediasource(False)
 
         settings.set_default_font_family("DejaVu Sans")
+        #settings.set_default_font_family("Liberation Sans")
+        settings.set_monospace_font_family("Liberation Mono")
         settings.set_default_font_size(14)
         settings.set_minimum_font_size(12)
 
