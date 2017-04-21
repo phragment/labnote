@@ -457,7 +457,7 @@ class mainwindow():
                     rev = ""
                 dt = datetime.datetime.now().strftime("%Y-%m-%d")
 
-                preamble  = "\\usepackage[left=2cm,right=1cm,top=1.5cm,bottom=1.5cm,includeheadfoot]{geometry}\n"
+                preamble  = "\\usepackage[left=2cm,right=2cm,top=1.5cm,bottom=1.5cm,includeheadfoot]{geometry}\n"
                 preamble += "\\usepackage{parskip}\n"
                 preamble += "\\usepackage{lmodern}\n"
                 preamble += "\\usepackage{fancyhdr}\n"
@@ -480,8 +480,6 @@ class mainwindow():
                 rst = self.tvbuffer.props.text
 
                 try:
-                    # http://docutils.sourceforge.net/docs/user/config.html#latex2e-writer
-                    # http://docutils.sourceforge.net/docs/user/latex.html
                     latex = docutils.core.publish_string(rst, writer_name='latex', settings=None, settings_overrides=args)
                 except NotImplementedError:
                     # "Cells that span multiple rows *and* columns currently not supported, sorry."
@@ -630,6 +628,9 @@ class mainwindow():
 
     def uri_scheme_deny(self, request):
 
+        # GLib-GObject-WARNING **: invalid cast from 'WebKitSoupRequestGeneric' to 'SoupRequestHTTP'
+        # libsoup-CRITICAL **: soup_request_http_get_message: assertion 'SOUP_IS_REQUEST_HTTP (http)' failed
+
         # this is not called!
         log.debug("uri scheme denied " + request.get_uri())
         err = GLib.Error("load cancelled: extern")
@@ -638,22 +639,29 @@ class mainwindow():
 
     def sane(self, uri):
 
+        # remove file://
         uri = uri[7:]
+        # remove trailing slash
         if uri.endswith("/"):
             uri = uri[:-1]
 
+        uri = uri.split("/")
+
+        # check link
+        # file://foo.rst -> file://foo.rst
+        # foo.rst        -> file://dummy.rst/foo.rst
         local = False
-        uri_ = uri.split("/")
-        if len(uri_) > 1:
-            if uri_[0].endswith(".rst"):
-                uri_ = uri_[1:]
+        if len(uri) > 1:
+            if uri[0].endswith(".rst"):
+                uri = uri[1:]
                 local = True
-        uri = "/".join(uri_)
+
+        uri = "/".join(uri)
 
         return uri, local
 
+
     def uri_scheme_file(self, request):
-        #self.state.set_label("loading")
 
         uri = request.get_uri()
         log.debug("----------")
