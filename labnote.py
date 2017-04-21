@@ -62,7 +62,8 @@ import docutils
 import docutils.core
 
 # TODO
-# - lock rendering
+# - make long running tasks async
+#  - lock rendering
 #
 # - GtkShortcutsWindow ???
 #  Ctrl+? and Ctrl+F1
@@ -779,8 +780,7 @@ class mainwindow():
         html = self.render(rst, lock=True)
 
         base = os.path.basename(self.current_file) + "/" + os.path.dirname(self.current_file)
-        #base = os.path.normpath(base)
-        base = "file://" + base + "/"
+        base = "file://" + base
         log.debug("base " + base)
         self.ignore_modified = True
         self.webview.load_html(html, base)
