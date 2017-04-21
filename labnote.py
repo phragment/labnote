@@ -62,6 +62,8 @@ import docutils
 import docutils.core
 
 # TODO
+# - lock rendering
+#
 # - GtkShortcutsWindow ???
 #  Ctrl+? and Ctrl+F1
 #  - menu + accels?
@@ -466,8 +468,11 @@ class mainwindow():
                 preamble += "\\pagestyle{fancy}\n"
                 preamble += "\\makeatletter\n"
                 preamble += "\\let\\ps@plain\\ps@fancy\n"
-                preamble += "\\usepackage[pdftex]{graphicx}\n"
-                preamble += "\\setkeys{Gin}{width=0.8\\textwidth,height=0.3\\textheight,keepaspectratio}\n"
+                # set sane maximum
+                preamble += "\\usepackage[export]{adjustbox}\n"
+                preamble += "\\let\\oldincludegraphics\\includegraphics\n"
+                preamble += "\\renewcommand{\\includegraphics}[2][]{%\n"
+                preamble += "  \\oldincludegraphics[#1, max width=0.8\\textwidth, max height=0.4\\textheight, keepaspectratio]{#2} }\n"
 
                 args = {"latex_preamble": preamble}
 
@@ -478,6 +483,7 @@ class mainwindow():
                     # http://docutils.sourceforge.net/docs/user/latex.html
                     latex = docutils.core.publish_string(rst, writer_name='latex', settings=None, settings_overrides=args)
                 except NotImplementedError:
+                    # "Cells that span multiple rows *and* columns currently not supported, sorry."
                     log.error("could not convert to latex")
                     return True
                 latex = latex.decode()
@@ -485,7 +491,8 @@ class mainwindow():
                     # copy whole current dir contents to tmpdir, kind of hacky
                     curdir = os.path.dirname(self.current_file)
                     curdir = os.path.join(startdir, curdir)
-                    run(["bash", "-c", "cp " + curdir + "/* " + tmpdir])
+                    # TODO this limits image references, etc to subdirs!
+                    run(["bash", "-c", "cp -r " + curdir + "/* " + tmpdir])
 
                     with open(os.path.join(tmpdir, "labnote.tex"), "w") as f:
                         f.write(latex)
@@ -498,8 +505,9 @@ class mainwindow():
                         log.debug("second latex run")
                         (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
                     run(["mv", "labnote.pdf", "/tmp/"], cwd=tmpdir)
-                    # debug
-                    #run(["mv", "labnote.tex", "/tmp/"], cwd=tmpdir)
+
+                    if log.getEffectiveLevel() < logging.ERROR:
+                        run(["cp", "-r", tmpdir, "/tmp/labnote_latex"], cwd=tmpdir)
 
                 subprocess.call(["xdg-open", "/tmp/labnote.pdf"])
                 log.debug("export done")
@@ -879,6 +887,7 @@ class mainwindow():
             except docutils.utils.SystemMessage as e:
                 return "<body>Error<br>" + str(e) + "</body>"
 
+        # TODO dont lock on empty file?
         if lock or self.lock_line:
             prev = []
             for elem in dtree.traverse(siblings=True):
