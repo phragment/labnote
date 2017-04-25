@@ -787,8 +787,7 @@ class mainwindow():
 
         html = self.render(rst, lock=True)
 
-        base = os.path.basename(self.current_file) + "/" + os.path.dirname(self.current_file)
-        base = "file://" + base
+        base = "file://dummy.rst/" + os.path.dirname(self.current_file) + "/" + os.path.basename(self.current_file)
         log.debug("base " + base)
         self.ignore_modified = True
         self.webview.load_html(html, base)
