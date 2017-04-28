@@ -508,7 +508,7 @@ class mainwindow():
                     if log.getEffectiveLevel() < logging.ERROR:
                         run(["cp", "-r", tmpdir, "/tmp/labnote_latex"], cwd=tmpdir)
 
-                subprocess.call(["xdg-open", "/tmp/labnote.pdf"])
+                self.open_uri("/tmp/labnote.pdf")
                 log.debug("export done")
                 return True
 
@@ -621,7 +621,7 @@ class mainwindow():
             decision.ignore()
 
             if uri.scheme in self.extern:
-                subprocess.call(["/usr/bin/xdg-open", uri.geturl()])
+                self.open_uri(uri.geturl())
 
         return True
 
@@ -701,7 +701,7 @@ class mainwindow():
             return
 
         if self.load_state == 0:
-            self.open_file(uri)
+            self.open_uri(uri)
 
             err = GLib.Error("load cancelled: file opened externally")
             request.finish_error(err)
@@ -709,11 +709,15 @@ class mainwindow():
             return
 
 
-    def open_file(self, uri):
-        log.debug("opening file: " + uri)
-        ret = subprocess.call(["/usr/bin/xdg-open", uri])
+    def open_uri(self, uri):
+        log.debug("opening external: " + uri)
+        if log.getEffectiveLevel() < logging.ERROR:
+            ret = subprocess.call(["/usr/bin/xdg-open", uri])
+        else:
+            ret = subprocess.call(["/usr/bin/xdg-open", uri],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if ret != 0:
-            log.debug("file could not be opened")
+            log.warn("could not be opened")
 
 
     def load_img(self, uri, request):
