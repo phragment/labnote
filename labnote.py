@@ -63,20 +63,6 @@ import docutils.core
 
 # TODO
 # - make long running tasks async
-#  - lock rendering
-#
-# - GtkShortcutsWindow ???
-#  Ctrl+? and Ctrl+F1
-#  - menu + accels?
-# - config file handling
-# - stylesheet handling & paths
-# - use os.path consequently
-
-# git integration
-#  - commit on file switch (done)
-#  - add after new file saved (done)
-#  - push before exit (done)
-#  - get revision pdf export (done)
 
 class mainwindow():
 
@@ -490,7 +476,7 @@ class mainwindow():
                     # copy whole current dir contents to tmpdir, kind of hacky
                     curdir = os.path.dirname(self.current_file)
                     curdir = os.path.join(startdir, curdir)
-                    # TODO this limits image references, etc to subdirs!
+                    # FIXME this limits image references, etc to subdirs!
                     run(["bash", "-c", "cp -r " + curdir + "/* " + tmpdir])
 
                     with open(os.path.join(tmpdir, "labnote.tex"), "w") as f:
@@ -778,6 +764,7 @@ class mainwindow():
         self.tvbuffer.set_modified(False)
         self.tvbuffer.handler_unblock_by_func(self.buffer_changed)
 
+        self.lock_line = 0
         html = self.render(txt)
 
         html = html.encode("latin-1", errors="xmlcharrefreplace")
@@ -900,7 +887,6 @@ class mainwindow():
             except docutils.utils.SystemMessage as e:
                 return "<body>Error<br>" + str(e) + "</body>"
 
-        # TODO dont lock on empty file?
         if lock or self.lock_line:
             prev = []
             for elem in dtree.traverse(siblings=True):
@@ -1101,8 +1087,7 @@ if __name__ == "__main__":
     right_side_editor = config.getboolean("labnote", "right_side_editor")
     source_view_scheme = config.get("labnote", "source_view_scheme")
     stylesheet = config.get("labnote", "stylesheet")
-    # TODO ugly
-    if stylesheet != "":
+    if stylesheet:
         stylesheet = configpath_ + "/labnote/" + stylesheet
 
 
