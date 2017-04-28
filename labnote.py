@@ -1113,12 +1113,12 @@ if __name__ == "__main__":
     os.chdir(startdir)
     startfile = os.path.basename(start)
 
-    # check for git
-    (ret, out) = run(["git", "status"])
-
-    if ret == 0:
+    # check for git, but only if our startdir is a git root
+    if os.path.isdir(startdir + "/.git"):
+        log.debug("startdir is a git root")
         git = True
     else:
+        log.debug("startdir is NO git root")
         git = False
 
 
