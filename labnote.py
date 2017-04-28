@@ -701,17 +701,19 @@ class mainwindow():
             return
 
         if self.load_state == 0:
-            self.open_file(uri, request)
+            self.open_file(uri)
 
-            err = GLib.Error("load cancelled: opening file externally")
+            err = GLib.Error("load cancelled: file opened externally")
             request.finish_error(err)
 
             return
 
 
-    def open_file(self, uri, request):
-        log.debug("open file: " + uri)
-        subprocess.call(["/usr/bin/xdg-open", uri])
+    def open_file(self, uri):
+        log.debug("opening file: " + uri)
+        ret = subprocess.call(["/usr/bin/xdg-open", uri])
+        if ret != 0:
+            log.debug("file could not be opened")
 
 
     def load_img(self, uri, request):
