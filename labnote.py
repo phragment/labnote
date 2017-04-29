@@ -522,10 +522,11 @@ class mainwindow():
                     text_ += "  " + line + "\n"
 
                 sel = self.tvbuffer.get_selection_bounds()
+                self.tvbuffer.begin_user_action()
                 if sel:
                     self.tvbuffer.delete(sel[0], sel[1])
-
                 self.tvbuffer.insert_at_cursor(text_)
+                self.tvbuffer.end_user_action()
 
                 return True
 
@@ -556,21 +557,22 @@ class mainwindow():
                     img.savev(imgpath, "png", [None], [None])
 
                     sel = self.tvbuffer.get_selection_bounds()
+                    self.tvbuffer.begin_user_action()
                     if sel:
                         self.tvbuffer.delete(sel[0], sel[1])
-
                     self.tvbuffer.insert_at_cursor("\n.. image:: " + imgname + "\n   :target: " + imgname + "\n")
+                    self.tvbuffer.end_user_action()
 
                     return True
                 if self.clipboard.wait_is_text_available():
                     print("handle paste")
                     txt = self.clipboard.wait_for_text()
                     sel = self.tvbuffer.get_selection_bounds()
+                    self.tvbuffer.begin_user_action()
                     if sel:
-                        # triggers "changed"
                         self.tvbuffer.delete(sel[0], sel[1])
-                    # triggers "changed"
                     self.tvbuffer.insert_at_cursor(txt)
+                    self.tvbuffer.end_user_action()
                     return Gdk.EVENT_STOP
 
         # Alt
