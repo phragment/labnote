@@ -565,7 +565,6 @@ class mainwindow():
 
                     return True
                 if self.clipboard.wait_is_text_available():
-                    print("handle paste")
                     txt = self.clipboard.wait_for_text()
                     sel = self.tvbuffer.get_selection_bounds()
                     self.tvbuffer.begin_user_action()
