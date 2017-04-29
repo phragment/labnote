@@ -279,6 +279,8 @@ class mainwindow():
         statusbar.pack_start(self.state, False, False, 3)
 
         self.textview.get_buffer().connect("changed", self.buffer_changed)
+        self.textview.get_buffer().connect("begin-user-action", self.buffer_user_action_begin)
+        self.textview.get_buffer().connect("end-user-action", self.buffer_user_action_end)
 
         self.clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
         self.primary_selection = Gtk.Clipboard.get(Gdk.SELECTION_PRIMARY)
@@ -288,6 +290,15 @@ class mainwindow():
         self.search_results_sw.hide()
         self.textview.grab_focus()
 
+
+    def buffer_user_action_begin(self, tvbuffer):
+        log.debug("user action begin")
+        self.tvbuffer.handler_block_by_func(self.buffer_changed)
+
+    def buffer_user_action_end(self, tvbuffer):
+        log.debug("user action end")
+        self.tvbuffer.handler_unblock_by_func(self.buffer_changed)
+        self.buffer_changed(tvbuffer)
 
     def textview_on_size_allocate(self, widget, allocation):
 
@@ -551,6 +562,16 @@ class mainwindow():
                     self.tvbuffer.insert_at_cursor("\n.. image:: " + imgname + "\n   :target: " + imgname + "\n")
 
                     return True
+                if self.clipboard.wait_is_text_available():
+                    print("handle paste")
+                    txt = self.clipboard.wait_for_text()
+                    sel = self.tvbuffer.get_selection_bounds()
+                    if sel:
+                        # triggers "changed"
+                        self.tvbuffer.delete(sel[0], sel[1])
+                    # triggers "changed"
+                    self.tvbuffer.insert_at_cursor(txt)
+                    return Gdk.EVENT_STOP
 
         # Alt
         if event.state & Gdk.ModifierType.MOD1_MASK:
