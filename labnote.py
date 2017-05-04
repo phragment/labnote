@@ -171,6 +171,8 @@ class mainwindow():
         settings = self.webview.get_settings()
         settings.set_enable_javascript(True)
 
+        settings.set_allow_file_access_from_file_urls(True)
+        settings.set_allow_universal_access_from_file_urls(True)
         #
         settings.set_enable_java(False)
         # flash, pipelight, etc.
@@ -653,20 +655,21 @@ class mainwindow():
         if uri.endswith("/"):
             uri = uri[:-1]
 
+        if uri.startswith("/") and uri.endswith(".rst"):
+            uri = uri[1:]
+
         uri = uri.split("/")
 
         # check link
         # file://foo.rst -> file://foo.rst
         # foo.rst        -> file://dummy.rst/foo.rst
-        local = False
         if len(uri) > 1:
             if uri[0].endswith(".rst"):
                 uri = uri[1:]
-                local = True
 
         uri = "/".join(uri)
 
-        return uri, local
+        return uri
 
 
     def uri_scheme_file(self, request):
@@ -681,10 +684,10 @@ class mainwindow():
         uri = urllib.request.unquote(uri)
         uri = uri.replace(rechar, " ")
 
-        (uri, local) = self.sane(uri)
-        log.debug("URI " + uri + " " + str(local))
+        uri = self.sane(uri)
+        log.debug("URI " + uri)
 
-        if self.load_state == 0 and uri.endswith(".rst") and local:
+        if self.load_state == 0 and uri.endswith(".rst"):
 
             if self.tvbuffer.get_modified() and not self.ignore_modified:
                 log.debug("cancel due to modified")
