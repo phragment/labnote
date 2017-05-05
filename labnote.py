@@ -593,7 +593,7 @@ class mainwindow():
 
 
     def load_uri(self, uri):
-        self.webview.load_uri("file://dummy.rst/" + uri)
+        self.webview.load_uri("file://labnote.int.abs/" + uri)
 
 
     def load_failed(self, view, event, failing_uri, error):
@@ -671,6 +671,75 @@ class mainwindow():
 
         return uri
 
+    def dtree_prep(self, dtree):
+        ## path to uri
+
+        for elem in dtree.traverse(siblings=True):
+            if elem.tagname == "reference" or elem.tagname == "image":
+                try:
+                    if elem.tagname == "reference":
+                        refuri = elem["refuri"]
+                    if elem.tagname == "image":
+                        refuri = elem["uri"]
+                except KeyError:
+                    continue
+
+                #log.debug("refuri " + refuri)
+                if "://" in refuri:
+                    if not refuri.startswith("file://"):
+                        continue
+
+                if refuri.startswith("file://"):
+                    a = "ext"
+                    refuri = refuri[7:]
+                else:
+                    a = "int"
+
+                if refuri.startswith("/"):
+                    b = "abs"
+                    refuri = refuri[1:]
+                else:
+                    b = "rel"
+
+                if refuri.startswith("..") and b == "rel":
+                    if a == "int":
+                        refuri = os.path.dirname(self.current_file) + "/" + refuri
+                        refuri = os.path.normpath(refuri)
+                        b = "abs"
+                    if a == "ext":
+                        refuri = startdir + "/" + refuri
+                        refuri = os.path.normpath(refuri)
+                        refuri = refuri[1:]
+                        b = "abs"
+
+                refuri = "file://labnote.{}.{}/{}".format(a, b, refuri)
+                #log.debug("       " + refuri)
+
+                if elem.tagname == "reference":
+                    elem["refuri"] = refuri
+                if elem.tagname == "image":
+                    elem["uri"] = refuri
+
+        return dtree
+
+    def uri_prep(self, uri, startdir, curdir):
+        ## uri to path
+        uri_ = uri[23:]
+
+        if uri[15:18] == "ext":
+            ext = True
+            if uri[19:22] == "rel":
+                uri_ = startdir + "/" + uri_
+            else:
+                uri_ = "/" + uri_
+        else:
+            ext = False
+            if uri[19:22] == "rel":
+                if curdir:
+                    uri_ = curdir + "/" + uri_
+
+        return uri_, ext
+
 
     def uri_scheme_file(self, request):
 
@@ -684,10 +753,10 @@ class mainwindow():
         uri = urllib.request.unquote(uri)
         uri = uri.replace(rechar, " ")
 
-        uri = self.sane(uri)
+        uri, ext = self.uri_prep(uri, startdir, os.path.dirname(self.current_file))
         log.debug("URI " + uri)
 
-        if self.load_state == 0 and uri.endswith(".rst"):
+        if self.load_state == 0 and uri.endswith(".rst") and not ext:
 
             if self.tvbuffer.get_modified() and not self.ignore_modified:
                 log.debug("cancel due to modified")
@@ -805,7 +874,7 @@ class mainwindow():
 
         html = self.render(rst, lock=True)
 
-        base = "file://dummy.rst/" + self.current_file
+        base = "file://labnote.int.abs/" + self.current_file
         log.debug("base " + base)
         self.ignore_modified = True
         self.webview.load_html(html, base)
@@ -911,6 +980,8 @@ class mainwindow():
                 dtree = docutils.core.publish_doctree(rst)
             except docutils.utils.SystemMessage as e:
                 return "<body>Error<br>" + str(e) + "</body>"
+
+        dtree = self.dtree_prep(dtree)
 
         if lock or self.lock_line:
             prev = []
