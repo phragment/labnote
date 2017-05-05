@@ -647,30 +647,6 @@ class mainwindow():
         request.finish_error(err)
 
 
-    def sane(self, uri):
-
-        # remove file://
-        uri = uri[7:]
-        # remove trailing slash
-        if uri.endswith("/"):
-            uri = uri[:-1]
-
-        if uri.startswith("/") and uri.endswith(".rst"):
-            uri = uri[1:]
-
-        uri = uri.split("/")
-
-        # check link
-        # file://foo.rst -> file://foo.rst
-        # foo.rst        -> file://dummy.rst/foo.rst
-        if len(uri) > 1:
-            if uri[0].endswith(".rst"):
-                uri = uri[1:]
-
-        uri = "/".join(uri)
-
-        return uri
-
     def dtree_prep(self, dtree):
         ## path to uri
 
@@ -749,28 +725,36 @@ class mainwindow():
         log.debug("URI " + uri)
         log.debug("state " + str(self.load_state))
 
-        # handle spaces in links
+        # handle non ascii
         uri = urllib.request.unquote(uri)
+        # handle spaces in links
         uri = uri.replace(rechar, " ")
 
         uri, ext = self.uri_prep(uri, startdir, os.path.dirname(self.current_file))
         log.debug("URI " + uri)
 
-        if self.load_state == 0 and uri.endswith(".rst") and not ext:
+        if self.load_state == 0:
 
-            if self.tvbuffer.get_modified() and not self.ignore_modified:
-                log.debug("cancel due to modified")
-                err = GLib.Error("load cancelled: open file modified")
-                request.finish_error(err)
+            if uri.endswith(".rst") and not ext:
 
-                self.saved_request = request.get_uri()
+                if self.tvbuffer.get_modified() and not self.ignore_modified:
+                    log.debug("cancel due to modified")
+                    err = GLib.Error("load cancelled: open file modified")
+                    request.finish_error(err)
 
-                self.info.set_reveal_child(True)
-                self.info_box_button_ok.grab_focus()
+                    self.saved_request = request.get_uri()
+
+                    self.info.set_reveal_child(True)
+                    self.info_box_button_ok.grab_focus()
+                    return
+
+                self.load_rst(uri, request)
+                self.state.set_label("loaded")
                 return
 
-            self.load_rst(uri, request)
-            self.state.set_label("loaded")
+            self.open_uri(uri)
+            err = GLib.Error("load cancelled: file opened externally")
+            request.finish_error(err)
             return
 
         if self.load_state == 1:
@@ -778,14 +762,6 @@ class mainwindow():
             log.debug(typ)
             if typ and typ.startswith("image"):
                 self.load_img(uri, request)
-            return
-
-        if self.load_state == 0:
-            self.open_uri(uri)
-
-            err = GLib.Error("load cancelled: file opened externally")
-            request.finish_error(err)
-
             return
 
 
@@ -901,10 +877,6 @@ class mainwindow():
         self.search_results.clear()
 
         if self.search_mode == "global":
-            #path = os.path.dirname(self.current_file)
-            #if not path:
-            #    path = "./"
-            #res = grep(pattern, path)
             res = grep(pattern, startdir)
 
             for r in res:
