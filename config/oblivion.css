@@ -3,20 +3,14 @@ body {
   background-color: #2e3436;
 }
 
-div.figure img,
-a img {
-  display: block;
-  max-width: 80%;
-  max-height: 60%;
-  margin-left: auto;
-  margin-right: auto;
-}
 img {
   display: block;
   max-width: 80%;
   max-height: 60%;
   margin-top: 10px;
   margin-bottom: 10px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 a {
@@ -348,28 +342,29 @@ pre.code .ln {
 
 pre.code,
 code {
-  background-color: #6e7d82;
+  background-color: #2b3133;
+  padding: 10px;
+  border-radius: 10px;
 }
 
 pre.code .comment,
 code .comment {
-  color: #5C6576;
+  color: #888a85;
 }
 
 pre.code .keyword,
 code .keyword {
-  color: #3B0D06;
-  font-weight: bold;
+  color: #ad7fa8;
 }
 
 pre.code .literal.string,
 code .literal.string {
-  color: #0C5404;
+  color: #edd400;
 }
 
 pre.code .name.builtin,
 code .name.builtin {
-  color: #352B84;
+  color: #729fcf;
 }
 
 pre.code .deleted,
