@@ -660,36 +660,9 @@ class mainwindow():
                 except KeyError:
                     continue
 
-                #log.debug("refuri " + refuri)
-                if "://" in refuri:
-                    if not refuri.startswith("file://"):
-                        continue
-
-                if refuri.startswith("file://"):
-                    a = "ext"
-                    refuri = refuri[7:]
-                else:
-                    a = "int"
-
-                if refuri.startswith("/"):
-                    b = "abs"
-                    refuri = refuri[1:]
-                else:
-                    b = "rel"
-
-                if refuri.startswith("..") and b == "rel":
-                    if a == "int":
-                        refuri = os.path.dirname(self.current_file) + "/" + refuri
-                        refuri = os.path.normpath(refuri)
-                        b = "abs"
-                    if a == "ext":
-                        refuri = startdir + "/" + refuri
-                        refuri = os.path.normpath(refuri)
-                        refuri = refuri[1:]
-                        b = "abs"
-
-                refuri = "file://labnote.{}.{}/{}".format(a, b, refuri)
-                #log.debug("       " + refuri)
+                refuri = ref2uri(refuri, os.path.dirname(self.current_file))
+                if not refuri:
+                    continue
 
                 if elem.tagname == "reference":
                     elem["refuri"] = refuri
@@ -697,24 +670,6 @@ class mainwindow():
                     elem["uri"] = refuri
 
         return dtree
-
-    def uri_prep(self, uri, startdir, curdir):
-        ## uri to path
-        uri_ = uri[23:]
-
-        if uri[15:18] == "ext":
-            ext = True
-            if uri[19:22] == "rel":
-                uri_ = startdir + "/" + uri_
-            else:
-                uri_ = "/" + uri_
-        else:
-            ext = False
-            if uri[19:22] == "rel":
-                if curdir:
-                    uri_ = curdir + "/" + uri_
-
-        return uri_, ext
 
 
     def uri_scheme_file(self, request):
@@ -730,7 +685,7 @@ class mainwindow():
         # handle spaces in links
         uri = uri.replace(rechar, " ")
 
-        uri, ext = self.uri_prep(uri, startdir, os.path.dirname(self.current_file))
+        uri, ext = uri2path(uri, os.path.dirname(self.current_file), startdir)
         log.debug("URI " + uri)
 
         if self.load_state == 0:
@@ -1002,6 +957,58 @@ class mainwindow():
             log.info("load time " + str(b - a))
 
         return html
+
+
+def ref2uri(refuri, curdir):
+    ## path to uri
+
+    if "://" in refuri:
+        if not refuri.startswith("file://"):
+            return None
+
+    if refuri.startswith("file://"):
+        a = "ext"
+        refuri = refuri[7:]
+    else:
+        a = "int"
+
+    if refuri.startswith("/"):
+        b = "abs"
+        refuri = refuri[1:]
+    else:
+        b = "rel"
+
+    if refuri.startswith("..") and b == "rel":
+        if a == "int":
+            refuri = curdir + "/" + refuri
+            refuri = os.path.normpath(refuri)
+            b = "abs"
+        if a == "ext":
+            refuri = startdir + "/" + refuri
+            refuri = os.path.normpath(refuri)
+            refuri = refuri[1:]
+            b = "abs"
+
+    refuri = "file://labnote.{}.{}/{}".format(a, b, refuri)
+    return refuri
+
+def uri2path(uri, curdir, startdir):
+    ## uri to path
+    uri_ = uri[23:]
+
+    if uri[15:18] == "ext":
+        ext = True
+        if uri[19:22] == "rel":
+            uri_ = startdir + "/" + uri_
+        else:
+            uri_ = "/" + uri_
+    else:
+        ext = False
+        if uri[19:22] == "rel":
+            if curdir:
+                uri_ = curdir + "/" + uri_
+
+    return uri_, ext
 
 
 def search(pattern, filepath):
