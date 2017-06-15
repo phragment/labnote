@@ -43,7 +43,7 @@ from urllib.parse import urlparse
 # python-gobject
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import GObject, Gtk, Pango, Gdk, GdkPixbuf, GLib, Gio
+from gi.repository import GObject, Gtk, Pango, Gdk, GLib, Gio
 
 # webkit2gtk
 try:
@@ -162,8 +162,6 @@ class mainwindow():
 
         scrolledwindow.add(self.textview)
 
-
-        hbox2 = Gtk.HBox(True, 0)
 
         ## WebKit
         self.webview = WebKit2.WebView()
@@ -734,7 +732,6 @@ class mainwindow():
     def load_img(self, uri, request):
         log.debug("load image " + uri)
         try:
-            f = Gio.file_parse_name(uri)
             stream = Gio.file_new_for_path(uri).read()
             request.finish(stream, -1, None)
         except GLib.Error:
