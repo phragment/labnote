@@ -66,7 +66,7 @@ import docutils.core
 
 class mainwindow():
 
-    def __init__(self, source_view_scheme, stylesheet, right_side_editor, git):
+    def __init__(self, source_view_scheme, stylesheet, right_side_editor, editor_orientation, git):
 
         self.source_view_scheme = source_view_scheme
         self.stylesheet = stylesheet
@@ -119,7 +119,7 @@ class mainwindow():
 
 
         ##
-        vbox = Gtk.VBox(False, 0)
+        vbox = Gtk.Box(orientation = Gtk.Orientation.VERTICAL,spacing=0)
         self.window.add(vbox)
 
 
@@ -130,7 +130,7 @@ class mainwindow():
         tb_back.connect("clicked", self.go_back)
 
 
-        toolbox = Gtk.HBox(False, 0)
+        toolbox = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL, spacing = 0)
 
         self.entry = Gtk.Entry()
         self.entry.connect("activate", self.on_entry_act)
@@ -231,7 +231,7 @@ class mainwindow():
         self.search_results_sw.add(self.treeview)
 
         # homogeneous, spacing
-        hbox = Gtk.HBox(True, 0)
+        hbox = Gtk.Box(orientation = editor_orientation, spacing=0)
         if self.right_side_editor:
             # expand, fill, padding
             hbox.pack_start(self.search_results_sw, False, True, 0)
@@ -256,7 +256,7 @@ class mainwindow():
 
         self.info = Gtk.Revealer()
         vbox.pack_start(self.info, False, False, 2)
-        info_box = Gtk.HBox(False, 0)
+        info_box = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL, spacing=0)
         self.info.add(info_box)
         info_box_label = Gtk.Label("No write since last change. Proceed?")
         info_box.pack_start(info_box_label, False, False, 3)
@@ -270,7 +270,7 @@ class mainwindow():
         info_box.pack_end(info_box_button_cancel, False, False, 0)
 
 
-        statusbar = Gtk.HBox(False, 0)
+        statusbar = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL, spacing = 0)
         vbox.pack_start(statusbar, False, False, 0)
 
         self.state = Gtk.Label()
@@ -1135,6 +1135,7 @@ if __name__ == "__main__":
     right_side_editor = True
     source_view_scheme = default
     stylesheet = 
+    editor_orientation = HORIZONTAL
     """
     config = configparser.SafeConfigParser()
     config.read_string(default_config)
@@ -1159,6 +1160,7 @@ if __name__ == "__main__":
     right_side_editor = config.getboolean("labnote", "right_side_editor")
     source_view_scheme = config.get("labnote", "source_view_scheme")
     stylesheet = config.get("labnote", "stylesheet")
+    editor_orientation = config.get("labnote", "editor_orientation")
     if stylesheet:
         stylesheet = configpath_ + "/labnote/" + stylesheet
 
@@ -1184,6 +1186,10 @@ if __name__ == "__main__":
         log.debug("startdir is NO git root")
         git = False
 
+    if editor_orientation == "VERTICAL":
+        orientation = Gtk.Orientation.VERTICAL
+    else:
+        orientation = Gtk.Orientation.HORIZONTAL
 
     global loop
     loop = GObject.MainLoop(None)
@@ -1191,7 +1197,7 @@ if __name__ == "__main__":
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
     try:
-        window = mainwindow(source_view_scheme, stylesheet, right_side_editor, git)
+        window = mainwindow(source_view_scheme, stylesheet, right_side_editor, orientation, git)
 
         window.history_home = startfile
         window.load_uri(startfile)
