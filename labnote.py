@@ -66,7 +66,7 @@ import docutils.core
 
 class mainwindow():
 
-    def __init__(self, source_view_scheme, stylesheet, right_side_editor, git):
+    def __init__(self, source_view_scheme, stylesheet, right_side_editor, editor_orientation, git):
 
         self.source_view_scheme = source_view_scheme
         self.stylesheet = stylesheet
@@ -231,7 +231,7 @@ class mainwindow():
         self.search_results_sw.add(self.treeview)
 
         # homogeneous, spacing
-        hbox = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL, spacing=0)
+        hbox = Gtk.Box(orientation = editor_orientation, spacing=0)
         if self.right_side_editor:
             # expand, fill, padding
             hbox.pack_start(self.search_results_sw, False, True, 0)
@@ -1135,6 +1135,7 @@ if __name__ == "__main__":
     right_side_editor = True
     source_view_scheme = default
     stylesheet = 
+    editor_orientation = HORIZONTAL
     """
     config = configparser.SafeConfigParser()
     config.read_string(default_config)
@@ -1159,6 +1160,7 @@ if __name__ == "__main__":
     right_side_editor = config.getboolean("labnote", "right_side_editor")
     source_view_scheme = config.get("labnote", "source_view_scheme")
     stylesheet = config.get("labnote", "stylesheet")
+    editor_orientation = config.get("labnote", "editor_orientation")
     if stylesheet:
         stylesheet = configpath_ + "/labnote/" + stylesheet
 
@@ -1184,6 +1186,10 @@ if __name__ == "__main__":
         log.debug("startdir is NO git root")
         git = False
 
+    if editor_orientation == "VERTICAL":
+        orientation = Gtk.Orientation.VERTICAL
+    else:
+        orientation = Gtk.Orientation.HORIZONTAL
 
     global loop
     loop = GObject.MainLoop(None)
@@ -1191,7 +1197,7 @@ if __name__ == "__main__":
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
     try:
-        window = mainwindow(source_view_scheme, stylesheet, right_side_editor, git)
+        window = mainwindow(source_view_scheme, stylesheet, right_side_editor, orientation, git)
 
         window.history_home = startfile
         window.load_uri(startfile)
