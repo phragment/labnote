@@ -66,11 +66,9 @@ import docutils.core
 
 class mainwindow():
 
-    def __init__(self, source_view_scheme, stylesheet, right_side_editor, editor_orientation, git):
+    def __init__(self, config, git):
 
-        self.source_view_scheme = source_view_scheme
-        self.stylesheet = stylesheet
-        self.right_side_editor = right_side_editor
+        self.config = config
         self.git = git
 
         self.load_state = 0
@@ -155,7 +153,7 @@ class mainwindow():
         self.textview.set_smart_home_end(True)
         self.tvbuffer = self.textview.get_buffer()
         self.tvbuffer.props.language = GtkSource.LanguageManager.get_default().get_language('rst')
-        self.tvbuffer.props.style_scheme = GtkSource.StyleSchemeManager.get_default().get_scheme(source_view_scheme)
+        self.tvbuffer.props.style_scheme = GtkSource.StyleSchemeManager.get_default().get_scheme(self.config["sourceview_scheme"])
 
         self.textview.connect("button-press-event", self.on_button_press)
         self.textview.connect("size-allocate", self.textview_on_size_allocate)
@@ -231,16 +229,16 @@ class mainwindow():
         self.search_results_sw.add(self.treeview)
 
         # homogeneous, spacing
-        hbox = Gtk.Box(orientation = editor_orientation)
-        if self.right_side_editor:
+        hbox = Gtk.Box(orientation = self.config["layout"])
+        if self.config["editor_first"]:
             # expand, fill, padding
-            hbox.pack_start(self.search_results_sw, True, True, 0)
-            hbox.pack_start(self.webview, True, True, 1)
             hbox.pack_start(scrolledwindow, True, True, 1)
+            hbox.pack_start(self.webview, True, True, 1)
+            hbox.pack_start(self.search_results_sw, True, True, 0)
         else:
-            hbox.pack_start(scrolledwindow, True, True, 1)
-            hbox.pack_start(self.webview, True, True, 1)
             hbox.pack_start(self.search_results_sw, True, True, 0)
+            hbox.pack_start(self.webview, True, True, 1)
+            hbox.pack_start(scrolledwindow, True, True, 1)
         vbox.pack_start(hbox, True, True, 0)
 
         # search
@@ -876,14 +874,15 @@ class mainwindow():
 
         rst = handle_spaces(rst)
 
-        if self.stylesheet == "":
-            args = {'embed_stylesheet': True}
-        else:
+        stylepath = self.config["webview_style"]
+        if stylepath:
             args = {
                     'stylesheet_path': '',
-                    'stylesheet': self.stylesheet,
+                    'stylesheet': stylepath,
                     'embed_stylesheet': True
                 }
+        else:
+            args = {'embed_stylesheet': True}
 
         if lock or self.lock_line:
             # get current line
@@ -1108,6 +1107,68 @@ class devnull():
         sys.stderr = sys.__stderr__
 
 
+class ConfigParser():
+
+    def __init__(self):
+
+        self.default = """
+        [labnote]
+        default_path = ~/notes/index.rst
+        sourceview_scheme = default
+        webview_style = 
+        layout_vertical = False
+        editor_first = False
+        """
+
+    def get_config(self):
+
+        self.parser = configparser.SafeConfigParser()
+        self.parser.read_string(self.default)
+
+        config_home = os.getenv("XDG_CONFIG_HOME")
+        if not config_home:
+            config_home = os.path.expanduser("~/.config")
+
+        config_dir = os.path.join(config_home, "labnote")
+        config_path = os.path.join(config_dir, "config.ini")
+
+        try:
+            config_file = open(config_path, "r+")
+            self.parser.read_file(config_file)
+            config_file.close()
+        except FileNotFoundError:
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+            config_file = open(config_path, "w")
+            self.parser.write(config_file)
+            config_file.close()
+
+
+        self.config = {}
+
+        default_path = self.parser.get("labnote", "default_path")
+        if default_path:
+            self.config["path"] = default_path
+
+        layout_vertical = self.parser.getboolean("labnote", "layout_vertical")
+        if layout_vertical:
+            self.config["layout"] = Gtk.Orientation.VERTICAL
+        else:
+            self.config["layout"] = Gtk.Orientation.HORIZONTAL
+
+        self.config["sourceview_scheme"] = self.parser.get("labnote", "sourceview_scheme")
+
+        style = self.parser.get("labnote", "webview_style")
+        if style:
+            self.config["webview_style"] = os.path.join(config_dir, style)
+        else:
+            self.config["webview_style"] = None
+
+        self.config["editor_first"] = self.parser.getboolean("labnote", "editor_first")
+
+        return self.config
+
+
 if __name__ == "__main__":
 
     global rechar
@@ -1115,7 +1176,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="count")
-    parser.add_argument("path", nargs="?", default="~/notes/index.rst")
+    parser.add_argument("path", nargs="?")
     args = parser.parse_args()
 
     global log
@@ -1130,42 +1191,14 @@ if __name__ == "__main__":
     if args.verbose:
         log.setLevel(logging.DEBUG)
 
-    default_config = """
-    [labnote]
-    right_side_editor = True
-    source_view_scheme = default
-    stylesheet = 
-    editor_orientation = HORIZONTAL
-    """
-    config = configparser.SafeConfigParser()
-    config.read_string(default_config)
-
-    configpath_ = os.getenv("XDG_CONFIG_HOME")
-    if not configpath_:
-        configpath_ = os.path.expanduser("~/.config")
-
-    configpath = configpath_ + "/labnote/config.ini"
-    try:
-        configfile = open(configpath, "r+")
-        config.read_file(configfile)
-        configfile.close()
-    except FileNotFoundError:
-        configdir = os.path.dirname(configpath)
-        if not os.path.exists(configdir):
-            os.makedirs(configdir)
-        configfile = open(configpath, "w")
-        config.write(configfile)
-        configfile.close()
-
-    right_side_editor = config.getboolean("labnote", "right_side_editor")
-    source_view_scheme = config.get("labnote", "source_view_scheme")
-    stylesheet = config.get("labnote", "stylesheet")
-    editor_orientation = config.get("labnote", "editor_orientation")
-    if stylesheet:
-        stylesheet = configpath_ + "/labnote/" + stylesheet
+    config_parser = ConfigParser()
+    config = config_parser.get_config()
 
 
-    start = os.path.expanduser(args.path)
+    if args.path:
+        start = os.path.expanduser(args.path)
+    else:
+        start = os.path.expanduser(config["path"])
     log.debug("startpath " + start)
 
     mimetypes.init()
@@ -1186,18 +1219,13 @@ if __name__ == "__main__":
         log.debug("startdir is NO git root")
         git = False
 
-    if editor_orientation == "VERTICAL":
-        orientation = Gtk.Orientation.VERTICAL
-    else:
-        orientation = Gtk.Orientation.HORIZONTAL
-
     global loop
     loop = GObject.MainLoop(None)
 
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
     try:
-        window = mainwindow(source_view_scheme, stylesheet, right_side_editor, orientation, git)
+        window = mainwindow(config, git)
 
         window.history_home = startfile
         window.load_uri(startfile)

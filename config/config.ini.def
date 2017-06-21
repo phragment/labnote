@@ -1,5 +1,7 @@
 [labnote]
-right_side_editor = True
-source_view_scheme = default
-stylesheet = 
+default_path = ~/notes/index.rst
+sourceview_scheme = default
+webview_style = 
+layout_vertical = False
+editor_first = False
 
