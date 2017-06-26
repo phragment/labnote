@@ -29,7 +29,6 @@ import string
 import subprocess
 import sys
 import tempfile
-import time
 import urllib
 import urllib.request
 from urllib.parse import urlparse
@@ -74,6 +73,11 @@ class mainwindow():
         self.load_state = 0
         self.ignore_modified = False
         self.lock_line = 0
+        # this is used to lock the rendering for buffer updates
+        # gtk thread triggers an update, which is executed by
+        # callback in webkit thread
+        self.update_lock = False
+        self.update_deferred = False
 
         self.current_file = ""
 
@@ -277,8 +281,6 @@ class mainwindow():
         statusbar.pack_start(self.state, False, False, 3)
 
         self.textview.get_buffer().connect("changed", self.buffer_changed)
-        self.textview.get_buffer().connect("begin-user-action", self.buffer_user_action_begin)
-        self.textview.get_buffer().connect("end-user-action", self.buffer_user_action_end)
 
         self.clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
         self.primary_selection = Gtk.Clipboard.get(Gdk.SELECTION_PRIMARY)
@@ -288,15 +290,6 @@ class mainwindow():
         self.search_results_sw.hide()
         self.textview.grab_focus()
 
-
-    def buffer_user_action_begin(self, tvbuffer):
-        log.debug("user action begin")
-        self.tvbuffer.handler_block_by_func(self.buffer_changed)
-
-    def buffer_user_action_end(self, tvbuffer):
-        log.debug("user action end")
-        self.tvbuffer.handler_unblock_by_func(self.buffer_changed)
-        self.buffer_changed(tvbuffer)
 
     def textview_on_size_allocate(self, widget, allocation):
 
@@ -500,7 +493,7 @@ class mainwindow():
                         (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
                     run(["mv", "labnote.pdf", "/tmp/"], cwd=tmpdir)
 
-                    if log.getEffectiveLevel() < logging.ERROR:
+                    if log.isEnabledFor(logging.DEBUG):
                         run(["cp", "-r", tmpdir, "/tmp/labnote_latex"], cwd=tmpdir)
 
                 self.open_uri("/tmp/labnote.pdf")
@@ -520,11 +513,11 @@ class mainwindow():
                     text_ += "  " + line + "\n"
 
                 sel = self.tvbuffer.get_selection_bounds()
-                self.tvbuffer.begin_user_action()
+                self.lock()
                 if sel:
                     self.tvbuffer.delete(sel[0], sel[1])
                 self.tvbuffer.insert_at_cursor(text_)
-                self.tvbuffer.end_user_action()
+                self.unlock()
 
                 return True
 
@@ -555,21 +548,21 @@ class mainwindow():
                     img.savev(imgpath, "png", [None], [None])
 
                     sel = self.tvbuffer.get_selection_bounds()
-                    self.tvbuffer.begin_user_action()
+                    self.lock()
                     if sel:
                         self.tvbuffer.delete(sel[0], sel[1])
                     self.tvbuffer.insert_at_cursor("\n.. image:: " + imgname + "\n   :target: " + imgname + "\n")
-                    self.tvbuffer.end_user_action()
+                    self.unlock()
 
                     return True
                 if self.clipboard.wait_is_text_available():
                     txt = self.clipboard.wait_for_text()
                     sel = self.tvbuffer.get_selection_bounds()
-                    self.tvbuffer.begin_user_action()
+                    self.lock()
                     if sel:
                         self.tvbuffer.delete(sel[0], sel[1])
                     self.tvbuffer.insert_at_cursor(txt)
-                    self.tvbuffer.end_user_action()
+                    self.unlock()
                     return Gdk.EVENT_STOP
 
         # Alt
@@ -586,6 +579,24 @@ class mainwindow():
                 return True
 
         return False
+
+
+    def unlock(self):
+        #log.info("unlock update")
+        self.update_lock = False
+        if self.update_deferred:
+            self.update_deferred = False
+            self.buffer_changed(self.tvbuffer)
+
+    def lock(self):
+        if self.update_lock:
+            #log.info("update deferred")
+            self.update_deferred = True
+            return False
+        else:
+            #log.info("lock update, try ok")
+            self.update_lock = True
+            return True
 
 
     def load_uri(self, uri):
@@ -608,7 +619,12 @@ class mainwindow():
             self.load_state = 2
             self.ignore_modified = False
             log.debug("load finished")
+            if log.isEnabledFor(logging.INFO):
+                self.time_stop = datetime.datetime.now()
+                delta = self.time_stop - self.time_start
+                log.info(str(delta))
             log.debug("----------")
+            self.unlock()
 
 
     def disable_context_menu(self, view, menu, event, hittestresult):
@@ -670,6 +686,9 @@ class mainwindow():
 
     def uri_scheme_file(self, request):
 
+        if log.isEnabledFor(logging.INFO):
+            self.time_start = datetime.datetime.now()
+
         uri = request.get_uri()
         log.debug("----------")
         log.debug("loading")
@@ -718,7 +737,7 @@ class mainwindow():
 
     def open_uri(self, uri):
         log.debug("opening external: " + uri)
-        if log.getEffectiveLevel() < logging.ERROR:
+        if log.isEnabledFor(logging.DEBUG):
             ret = subprocess.call(["/usr/bin/xdg-open", uri])
         else:
             ret = subprocess.call(["/usr/bin/xdg-open", uri],
@@ -794,6 +813,13 @@ class mainwindow():
 
 
     def buffer_changed(self, textbuf):
+
+        if not self.lock():
+            return
+
+        if log.isEnabledFor(logging.INFO):
+            self.time_start = datetime.datetime.now()
+
         self.state.set_label("modified")
 
         rst = textbuf.props.text
@@ -870,19 +896,17 @@ class mainwindow():
 
     def render(self, rst, lock=False):
 
-        a = time.time()
-
         rst = handle_spaces(rst)
+
+        args = {
+            "embed_stylesheet": True,
+            "output_encoding": "unicode"
+        }
 
         stylepath = self.config["webview_style"]
         if stylepath:
-            args = {
-                    'stylesheet_path': '',
-                    'stylesheet': stylepath,
-                    'embed_stylesheet': True
-                }
-        else:
-            args = {'embed_stylesheet': True}
+            args["stylesheet_path"] = ""
+            args["stylesheet"] = stylepath
 
         if lock or self.lock_line:
             # get current line
@@ -923,7 +947,7 @@ class mainwindow():
                     break
 
             # more debug
-            if log.getEffectiveLevel() < logging.ERROR:
+            if log.isEnabledFor(logging.DEBUG):
                 pretty = docutils.core.publish_from_doctree(dtree, writer_name="pseudoxml")
 
                 with open("/tmp/labnote.dtree", "w") as f:
@@ -932,7 +956,6 @@ class mainwindow():
         with devnull():
             try:
                 html = docutils.core.publish_from_doctree(dtree, writer_name="html4css1", settings=None, settings_overrides=args)
-                html = html.decode()
             except docutils.utils.SystemMessage as e:
                 html = "<body>Error<br>" + str(e) + "</body>"
 
@@ -944,13 +967,9 @@ class mainwindow():
             html = re.sub(r'<head>', script, html, re.M)
 
         # debug output
-        if log.getEffectiveLevel() < logging.ERROR:
+        if log.isEnabledFor(logging.DEBUG):
             with open("/tmp/labnote.html", "w") as f:
                 f.write(html)
-
-        b = time.time()
-        if log.getEffectiveLevel() < logging.ERROR:
-            log.info("load time " + str(b - a))
 
         return html
 
@@ -1189,7 +1208,10 @@ if __name__ == "__main__":
     log.setLevel(logging.ERROR)
 
     if args.verbose:
-        log.setLevel(logging.DEBUG)
+        if args.verbose == 1:
+            log.setLevel(logging.INFO)
+        if args.verbose >= 2:
+            log.setLevel(logging.DEBUG)
 
     config_parser = ConfigParser()
     config = config_parser.get_config()
