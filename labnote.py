@@ -378,7 +378,7 @@ class mainwindow():
             if event.keyval == ord("s"):
                 log.debug("saving " + self.current_file)
 
-                self.state.set_label("saving...")
+                self.state.set_label("saving")
 
                 #
                 if self.git:
@@ -392,22 +392,12 @@ class mainwindow():
                     if not os.path.exists(filedir):
                         os.makedirs(filedir)
 
-                # write-replace (unix style)
-                tmpfile = "." + os.path.basename(self.current_file) + ".swp"
-                tmpfile = os.path.join(filedir, *[tmpfile])
-                log.debug("tmpfile " + tmpfile)
-
-                try:
-                    fd = os.open(tmpfile, os.O_WRONLY | os.O_CREAT| os.O_EXCL, 0o600)
-                except FileExistsError:
-                    self.state.set_label("could not save!")
-                    return
-                with os.fdopen(fd, "w") as f:
-                    f.write(self.tvbuffer.props.text)
-                os.rename(tmpfile, self.current_file)
-
-                self.tvbuffer.set_modified(False)
-                self.state.set_label("saved")
+                if save_file(self.current_file, self.tvbuffer.props.text):
+                    self.tvbuffer.set_modified(False)
+                    self.state.set_label("saved")
+                else:
+                    self.state.set_label("saving failed")
+                    return True
 
                 # git, add on new file saved
                 if self.git:
@@ -474,6 +464,7 @@ class mainwindow():
                     log.error("could not convert to latex")
                     return True
                 latex = latex.decode()
+
                 with tempfile.TemporaryDirectory(prefix="labnote-") as tmpdir:
                     # copy whole current dir contents to tmpdir, kind of hacky
                     curdir = os.path.dirname(self.current_file)
@@ -498,6 +489,7 @@ class mainwindow():
 
                 self.open_uri("/tmp/labnote.pdf")
                 log.debug("export done")
+
                 return True
 
             if event.keyval == ord("V"):
@@ -896,6 +888,7 @@ class mainwindow():
 
     def render(self, rst, lock=False):
 
+        # docutils: imho a bug
         rst = handle_spaces(rst)
 
         args = {
@@ -922,6 +915,7 @@ class mainwindow():
             mark = "<a id='btj0m1ve'></a>"
             node_mark = docutils.nodes.raw(mark, mark, format="html")
 
+        # docutils: should really use logging
         with devnull():
             try:
                 dtree = docutils.core.publish_doctree(rst)
@@ -957,6 +951,9 @@ class mainwindow():
             try:
                 html = docutils.core.publish_from_doctree(dtree, writer_name="html4css1", settings=None, settings_overrides=args)
             except docutils.utils.SystemMessage as e:
+                html = "<body>Error<br>" + str(e) + "</body>"
+            except AttributeError as e:
+                # docutils: parser should support optionally omitting broken nodes
                 html = "<body>Error<br>" + str(e) + "</body>"
 
         if lock or self.lock_line:
@@ -1026,6 +1023,31 @@ def uri2path(uri, curdir, startdir):
     return uri_, ext
 
 
+def save_file(fp, txt):
+
+    # write-replace (unix style)
+    fn = os.path.basename(fp)
+    dn = os.path.dirname(fp)
+
+    tfn = "." + fn + ".swp"
+    tfp = os.path.join(dn, tfn)
+
+    try:
+        tfd = os.open(tfp, os.O_WRONLY | os.O_CREAT| os.O_EXCL, 0o600)
+    except FileExistsError:
+        return False
+
+    with os.fdopen(tfd, "w") as tf:
+        tf.write(txt)
+
+    try:
+        os.rename(tfp, fp)
+    except OSError:
+        return False
+
+    return True
+
+
 def search(pattern, filepath):
     r = re.compile(pattern, flags=re.IGNORECASE)
     res = []
@@ -1034,7 +1056,6 @@ def search(pattern, filepath):
             if r.search(line):
                 res.append([str(lineno+1), "", line.strip()])
     return res
-
 
 def grep(pattern, dirpath):
     r = re.compile(pattern, flags=re.IGNORECASE)
