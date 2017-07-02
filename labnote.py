@@ -24,6 +24,7 @@ import mimetypes
 import os
 import random
 import re
+import shutil
 import signal
 import string
 import subprocess
@@ -60,8 +61,6 @@ from gi.repository import GtkSource
 import docutils
 import docutils.core
 
-# TODO
-# - make long running tasks async
 
 class mainwindow():
 
@@ -428,6 +427,8 @@ class mainwindow():
             if event.keyval == ord("E"):
                 log.debug("start export")
 
+                rst = self.tvbuffer.props.text
+
                 title = self.current_file.replace("_", "\_")
                 if self.git:
                     rev = git_get_rev(self.current_file)
@@ -435,57 +436,11 @@ class mainwindow():
                     rev = ""
                 dt = datetime.datetime.now().strftime("%Y-%m-%d")
 
-                preamble  = "\\usepackage[left=2cm,right=2cm,top=1.5cm,bottom=1.5cm,includeheadfoot]{geometry}\n"
-                preamble += "\\usepackage{parskip}\n"
-                preamble += "\\usepackage{lmodern}\n"
-                preamble += "\\usepackage{fancyhdr}\n"
-                preamble += "\\fancyhf{}\n"
-                preamble += "\\fancyhead[L]{" + title + "}\n"
-                preamble += "\\fancyhead[R]{\\thepage}\n"
-                preamble += "\\fancyfoot[L]{" + rev + "}\n"
-                preamble += "\\fancyfoot[R]{" + dt + "}\n"
-                preamble += "\\pagestyle{fancy}\n"
-                preamble += "\\makeatletter\n"
-                preamble += "\\let\\ps@plain\\ps@fancy\n"
-                # set sane maximum
-                preamble += "\\usepackage[export]{adjustbox}\n"
-                preamble += "\\let\\oldincludegraphics\\includegraphics\n"
-                preamble += "\\renewcommand{\\includegraphics}[2][]{%\n"
-                preamble += "  \\oldincludegraphics[#1, max width=0.8\\textwidth, max height=0.4\\textheight, keepaspectratio]{#2} }\n"
-
-                args = {"latex_preamble": preamble}
-
-                rst = self.tvbuffer.props.text
-
-                try:
-                    latex = docutils.core.publish_string(rst, writer_name='latex', settings=None, settings_overrides=args)
-                except NotImplementedError:
-                    # "Cells that span multiple rows *and* columns currently not supported, sorry."
-                    log.error("could not convert to latex")
+                tex = rst2tex(rst, title, rev, dt)
+                if not tex:
                     return True
-                latex = latex.decode()
 
-                with tempfile.TemporaryDirectory(prefix="labnote-") as tmpdir:
-                    # copy whole current dir contents to tmpdir, kind of hacky
-                    curdir = os.path.dirname(self.current_file)
-                    curdir = os.path.join(startdir, curdir)
-                    # FIXME this limits image references, etc to subdirs!
-                    run(["bash", "-c", "cp -r " + curdir + "/* " + tmpdir])
-
-                    with open(os.path.join(tmpdir, "labnote.tex"), "w") as f:
-                        f.write(latex)
-                    (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
-                    if ret != 0:
-                        log.error("latex failed")
-                        log.debug(out)
-                        return True
-                    if "Rerun" in out or "rerunfilecheck" in out:
-                        log.debug("second latex run")
-                        (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
-                    run(["mv", "labnote.pdf", "/tmp/"], cwd=tmpdir)
-
-                    if log.isEnabledFor(logging.DEBUG):
-                        run(["cp", "-r", tmpdir, "/tmp/labnote_latex"], cwd=tmpdir)
+                tex2pdf(tex, os.path.dirname(self.current_file), "/tmp/labnote.pdf")
 
                 self.open_uri("/tmp/labnote.pdf")
                 log.debug("export done")
@@ -1021,6 +976,75 @@ def uri2path(uri, curdir, startdir):
                 uri_ = curdir + "/" + uri_
 
     return uri_, ext
+
+
+def rst2tex(rst, title, rev, stamp):
+
+    preamble = r"""
+    \usepackage[left=2cm,right=2cm,top=1.5cm,bottom=1.5cm,includeheadfoot]{geometry}
+    \usepackage{parskip}
+    \usepackage{lmodern}
+    \usepackage{fancyhdr}
+    \fancyhf{}
+    \fancyfoot[R]{\thepage}
+    \pagestyle{fancy}
+    \makeatletter
+    \let\ps@plain\ps@fancy
+    \usepackage[export]{adjustbox}
+    \let\oldincludegraphics\includegraphics
+    \renewcommand{\includegraphics}[2][]{\oldincludegraphics[#1, max width=0.8\textwidth, max height=0.4\textheight, keepaspectratio]{#2}}
+    """
+
+    preamble += "\\fancyhead[L]{" + title + "}\n"
+    preamble += "\\fancyfoot[L]{" + rev   + "}\n"
+    preamble += "\\fancyfoot[R]{" + stamp + "}\n"
+
+    args = {"latex_preamble": preamble}
+
+    with devnull():
+        try:
+            tex = docutils.core.publish_string(rst, writer_name='latex',
+                                               settings=None, settings_overrides=args)
+        except NotImplementedError:
+            log.error("could not convert to tex")
+            return None
+
+    return tex.decode()
+
+def tex2pdf(tex, srcdir, pdfpath):
+    srcdir = os.path.abspath(srcdir)
+    pdfpath = os.path.abspath(pdfpath)
+
+    tmpdir = tempfile.mkdtemp(prefix="labnote-")
+
+    copytree(srcdir, tmpdir)
+
+    with open(os.path.join(tmpdir, "labnote.tex"), "w") as f:
+        f.write(tex)
+
+    for i in range(0, 4):
+        (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
+        if ret != 0:
+            log.warn(out)
+            if not log.isEnabledFor(logging.DEBUG):
+                shutil.rmtree(tmpdir)
+            return False
+        if "Rerun" in out:
+            continue
+        else:
+            shutil.move(os.path.join(tmpdir, "labnote.pdf"), pdfpath)
+            shutil.rmtree(tmpdir)
+            return True
+
+def copytree(src, dst):
+    # behaves like "mv src/* dst/"
+    for f in os.listdir(src):
+        s = os.path.join(src, f)
+        d = os.path.join(dst, f)
+        if os.path.isdir(s):
+            shutil.copytree(s, d, copy_function=shutil.copy)
+        else:
+            shutil.copy2(s, d)
 
 
 def save_file(fp, txt):
