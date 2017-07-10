@@ -32,7 +32,7 @@ import sys
 import tempfile
 import urllib
 import urllib.request
-from urllib.parse import urlparse
+import urllib.parse
 
 # Debian Jessie
 #   python3-gi
@@ -160,6 +160,10 @@ class mainwindow():
 
         self.textview.connect("button-press-event", self.on_button_press)
         self.textview.connect("size-allocate", self.textview_on_size_allocate)
+        self.tvbuffer.connect("changed", self.buffer_changed)
+
+        um = self.tvbuffer.get_undo_manager()
+        um.connect("can-undo-changed", self.buffer_undo)
 
         scrolledwindow.add(self.textview)
 
@@ -275,11 +279,15 @@ class mainwindow():
         vbox.pack_start(statusbar, False, False, 0)
 
         self.state = Gtk.Label()
+        self.state_file = Gtk.Label()
+        self.state_file.set_justify(Gtk.Justification.RIGHT)
+        self.state_editor = Gtk.Label()
+        self.state_editor.set_justify(Gtk.Justification.RIGHT)
         space = Gtk.Label()
-        statusbar.pack_start(space, True, True, 0)
         statusbar.pack_start(self.state, False, False, 3)
-
-        self.textview.get_buffer().connect("changed", self.buffer_changed)
+        statusbar.pack_start(space, True, True, 0)
+        statusbar.pack_start(self.state_file, False, False, 6)
+        statusbar.pack_start(self.state_editor, False, False, 3)
 
         self.clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
         self.primary_selection = Gtk.Clipboard.get(Gdk.SELECTION_PRIMARY)
@@ -377,7 +385,7 @@ class mainwindow():
             if event.keyval == ord("s"):
                 log.debug("saving " + self.current_file)
 
-                self.state.set_label("saving")
+                self.state_file.set_label("saving")
 
                 #
                 if self.git:
@@ -393,9 +401,9 @@ class mainwindow():
 
                 if save_file(self.current_file, self.tvbuffer.props.text):
                     self.tvbuffer.set_modified(False)
-                    self.state.set_label("saved")
+                    self.state_file.set_label("saved")
                 else:
-                    self.state.set_label("saving failed")
+                    self.state_file.set_label("saving failed")
                     return True
 
                 # git, add on new file saved
@@ -417,6 +425,12 @@ class mainwindow():
                 # this should wait for revealer animation to finish
                 self.search.grab_focus()
 
+            if event.keyval == ord("y"):
+                # not sure if redo is not mapped per default
+                # OR something masks it
+                if self.tvbuffer.get_undo_manager().can_redo():
+                    self.tvbuffer.get_undo_manager().redo()
+
             # Ctrl Shift
             if event.keyval == ord("F"):
                 self.search_mode = "global"
@@ -426,6 +440,8 @@ class mainwindow():
 
             if event.keyval == ord("E"):
                 log.debug("start export")
+                self.state.set_label("exporting")
+                # TODO should be async after here
 
                 rst = self.tvbuffer.props.text
 
@@ -438,12 +454,14 @@ class mainwindow():
 
                 tex = rst2tex(rst, title, rev, dt)
                 if not tex:
+                    self.state.set_label("export failed")
                     return True
 
                 tex2pdf(tex, os.path.dirname(self.current_file), "/tmp/labnote.pdf")
 
                 self.open_uri("/tmp/labnote.pdf")
                 log.debug("export done")
+                self.state.set_label("")
 
                 return True
 
@@ -579,18 +597,20 @@ class mainwindow():
 
 
     def load_policy(self, webview, decision, decision_type):
+        uri = decision.get_request().get_uri()
+
         if decision_type == WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
-            log.debug("navigation policy for: " + decision.get_request().get_uri())
+            log.debug("navigation policy for: " + uri)
         if decision_type == WebKit2.PolicyDecisionType.RESPONSE:
-            log.debug("response policy for: " + decision.get_request().get_uri())
+            log.debug("response policy for: " + uri)
 
-        uri = urlparse( decision.get_request().get_uri() )
+        url = urllib.parse.urlparse(uri)
 
-        if not uri.scheme == "file":
+        if not url.scheme == "file":
             decision.ignore()
 
-            if uri.scheme in self.extern:
-                self.open_uri(uri.geturl())
+            if url.scheme in self.extern:
+                self.open_uri(uri)
 
         return True
 
@@ -666,7 +686,10 @@ class mainwindow():
                     return
 
                 self.load_rst(uri, request)
-                self.state.set_label("loaded")
+
+                self.state_file.set_label("")
+                self.state.set_label("")
+                self.update_editor_state()
                 return
 
             self.open_uri(uri)
@@ -759,6 +782,13 @@ class mainwindow():
         request.finish(stream, -1, None)
 
 
+    def update_editor_state(self):
+
+        wcc = self.tvbuffer.get_char_count()
+        wcl = self.tvbuffer.get_line_count()
+        self.state_editor.set_label(str(wcl) + ", " + str(wcc))
+
+
     def buffer_changed(self, textbuf):
 
         if not self.lock():
@@ -767,7 +797,8 @@ class mainwindow():
         if log.isEnabledFor(logging.INFO):
             self.time_start = datetime.datetime.now()
 
-        self.state.set_label("modified")
+        self.state_file.set_label("modified")
+        self.update_editor_state()
 
         rst = textbuf.props.text
 
@@ -777,6 +808,12 @@ class mainwindow():
         log.debug("base " + base)
         self.ignore_modified = True
         self.webview.load_html(html, base)
+
+
+    def buffer_undo(self, manager):
+
+        if not self.tvbuffer.get_modified():
+            self.state_file.set_label("")
 
 
     def go_back(self, widget=None):
@@ -1044,7 +1081,7 @@ def copytree(src, dst):
         if os.path.isdir(s):
             shutil.copytree(s, d, copy_function=shutil.copy)
         else:
-            shutil.copy2(s, d)
+            shutil.copy(s, d)
 
 
 def save_file(fp, txt):
@@ -1142,7 +1179,7 @@ def handle_spaces(rstin):
         mat = reg.search(line)
         if mat:
             state = 0
-            fuck = ""
+            tl = ""
             for (i, c) in enumerate(line):
                 if state == 0 and c == '`':
                     state = 1
@@ -1152,8 +1189,8 @@ def handle_spaces(rstin):
                     state = 0
                 if state == 2 and c == ' ':
                     c = rechar
-                fuck += c
-            line = fuck
+                tl += c
+            line = tl
         rstout += line + "\n"
     return rstout
 
