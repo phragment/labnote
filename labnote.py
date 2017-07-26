@@ -70,7 +70,6 @@ class mainwindow():
         self.git = git
 
         self.load_state = 0
-        self.ignore_modified = False
         self.lock_line = 0
         # this is used to lock the rendering for buffer updates
         # gtk thread triggers an update, which is executed by
@@ -336,19 +335,13 @@ class mainwindow():
         res_line = int(model.get_value(it, 0)) - 1
 
         if self.search_mode == "global":
-
-            self.ignore_modified = True
-            self.lock_line = res_line
-
-            self.buffer_changed(self.tvbuffer)
+            self.load_uri(res_file)
 
         if self.search_mode == "local":
             it_ = self.tvbuffer.get_iter_at_line(res_line)
             self.textview.scroll_to_iter(it_, 0, True, 0.0, 0.0)
 
-            self.ignore_modified = True
             self.lock_line = res_line
-
             self.buffer_changed(self.tvbuffer)
 
 
@@ -400,8 +393,7 @@ class mainwindow():
                 self.search.grab_focus()
 
             if event.keyval == ord("y"):
-                # not sure if redo is not mapped per default
-                # OR something masks it
+                # gedit maps redo to Ctrl-Shift-Z
                 if self.tvbuffer.get_undo_manager().can_redo():
                     self.tvbuffer.get_undo_manager().redo()
 
@@ -590,7 +582,6 @@ class mainwindow():
             self.load_state = 1
         if event == WebKit2.LoadEvent.FINISHED:
             self.load_state = 2
-            self.ignore_modified = False
             log.debug("load finished")
             if log.isEnabledFor(logging.INFO):
                 self.time_stop = datetime.datetime.now()
@@ -682,7 +673,7 @@ class mainwindow():
 
             if uri.endswith(".rst") and not ext:
 
-                if self.tvbuffer.get_modified() and not self.ignore_modified:
+                if self.tvbuffer.get_modified():
                     log.debug("cancel due to modified")
                     err = GLib.Error("load cancelled: open file modified")
                     request.finish_error(err)
@@ -814,7 +805,6 @@ class mainwindow():
 
         base = "file://labnote.int.abs/" + self.current_file
         log.debug("base " + base)
-        self.ignore_modified = True
         self.webview.load_html(html, base)
 
 
