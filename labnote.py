@@ -361,12 +361,11 @@ class mainwindow():
         res_line = int(model.get_value(it, 0)) - 1
 
         if self.search_mode == "global":
-            # tvbuffer is updated by callback function below
 
             self.ignore_modified = True
             self.lock_line = res_line
 
-            self.load_uri(res_file)
+            self.buffer_changed(self.tvbuffer)
 
         if self.search_mode == "local":
             it_ = self.tvbuffer.get_iter_at_line(res_line)
@@ -375,7 +374,7 @@ class mainwindow():
             self.ignore_modified = True
             self.lock_line = res_line
 
-            self.load_uri(self.current_file)
+            self.buffer_changed(self.tvbuffer)
 
 
     def window_on_key_press(self, widget, event):
@@ -520,6 +519,7 @@ class mainwindow():
                     self.unlock()
 
                     return True
+
                 if self.clipboard.wait_is_text_available():
                     txt = self.clipboard.wait_for_text()
                     sel = self.tvbuffer.get_selection_bounds()
@@ -1023,7 +1023,7 @@ def rst2tex(rst, title, rev, stamp):
     \usepackage{lmodern}
     \usepackage{fancyhdr}
     \fancyhf{}
-    \fancyfoot[R]{\thepage}
+    \fancyhead[R]{\thepage}
     \pagestyle{fancy}
     \makeatletter
     \let\ps@plain\ps@fancy
@@ -1070,6 +1070,7 @@ def tex2pdf(tex, srcdir, pdfpath):
             continue
         else:
             shutil.move(os.path.join(tmpdir, "labnote.pdf"), pdfpath)
+            #shutil.move(os.path.join(tmpdir, "labnote.tex"), "/tmp/labnote.tex")
             shutil.rmtree(tmpdir)
             return True
 
