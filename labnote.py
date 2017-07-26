@@ -158,7 +158,6 @@ class mainwindow():
         self.tvbuffer.props.language = GtkSource.LanguageManager.get_default().get_language('rst')
         self.tvbuffer.props.style_scheme = GtkSource.StyleSchemeManager.get_default().get_scheme(self.config["sourceview_scheme"])
 
-        self.textview.connect("button-press-event", self.on_button_press)
         self.textview.connect("size-allocate", self.textview_on_size_allocate)
         self.tvbuffer.connect("changed", self.buffer_changed)
 
@@ -209,7 +208,6 @@ class mainwindow():
         self.webview.connect("decide-policy", self.load_policy)
         self.webview.connect("context-menu", self.disable_context_menu)
         self.webview.connect("load-changed", self.load_changed)
-        self.webview.connect("button-press-event", self.on_button_press)
         # debug
         self.webview.connect("load-failed", self.load_failed)
 
@@ -292,6 +290,11 @@ class mainwindow():
         self.clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
         self.primary_selection = Gtk.Clipboard.get(Gdk.SELECTION_PRIMARY)
 
+        self.textview.connect("key-press-event", self.twv_on_key_press)
+        self.webview.connect("key-press-event", self.twv_on_key_press)
+        self.textview.connect("button-press-event", self.twv_on_button_press)
+        self.webview.connect("button-press-event", self.twv_on_button_press)
+
         vbox.show_all()
         self.window.show()
         self.search_results_sw.hide()
@@ -312,34 +315,6 @@ class mainwindow():
 
     def info_box_button_cancel_clicked(self, widget):
         self.info.set_reveal_child(False)
-
-
-    def on_button_press(self, widget, event):
-        (ok, button) = event.get_button()
-
-        if button == 8:
-            self.go_back()
-            return True
-        if button == 9:
-            #self.go_forward()
-            return True
-
-        # handle pasting of primary selection
-        if button == Gdk.BUTTON_MIDDLE:
-            if self.tvbuffer.get_selection_bounds():
-                # if the selection comes from us
-                # we paste it at pointer location
-                return False
-
-            # if the selection does not come from us
-            # we paste put it at cursor location
-            if self.primary_selection.wait_is_text_available():
-                txt = self.primary_selection.wait_for_text()
-                if txt:
-                    self.tvbuffer.insert_at_cursor(txt)
-                    return True
-
-        return False
 
 
     def on_search_key(self, widget, event):
@@ -464,26 +439,25 @@ class mainwindow():
 
                 return True
 
-            if event.keyval == ord("V"):
+        # Alt
+        if event.state & Gdk.ModifierType.MOD1_MASK:
 
-                clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
-                text = clipboard.wait_for_text()
-
-                if not text:
-                    return True
-
-                text_ = ""
-                for line in text.splitlines():
-                    text_ += "  " + line + "\n"
-
-                sel = self.tvbuffer.get_selection_bounds()
-                self.lock()
-                if sel:
-                    self.tvbuffer.delete(sel[0], sel[1])
-                self.tvbuffer.insert_at_cursor(text_)
-                self.unlock()
-
+            if event.keyval == Gdk.KEY_Left:
+                log.debug("go back")
+                self.go_back()
                 return True
+
+            if event.keyval == Gdk.KEY_Up:
+                log.debug("go home")
+                self.load_uri(self.history_home)
+                return True
+
+        return False
+
+
+    def twv_on_key_press(self, widget, event):
+
+        if event.state & Gdk.ModifierType.CONTROL_MASK:
 
             if event.keyval == ord("v"):
                 # handling of clipboard pasting
@@ -528,20 +502,54 @@ class mainwindow():
                         self.tvbuffer.delete(sel[0], sel[1])
                     self.tvbuffer.insert_at_cursor(txt)
                     self.unlock()
-                    return Gdk.EVENT_STOP
+                    return True
 
-        # Alt
-        if event.state & Gdk.ModifierType.MOD1_MASK:
 
-            if event.keyval == Gdk.KEY_Left:
-                log.debug("go back")
-                self.go_back()
+            if event.keyval == ord("V"):
+
+                clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+                text = clipboard.wait_for_text()
+
+                if not text:
+                    return True
+
+                text_ = ""
+                for line in text.splitlines():
+                    text_ += "  " + line + "\n"
+
+                sel = self.tvbuffer.get_selection_bounds()
+                self.lock()
+                if sel:
+                    self.tvbuffer.delete(sel[0], sel[1])
+                self.tvbuffer.insert_at_cursor(text_)
+                self.unlock()
+
                 return True
 
-            if event.keyval == Gdk.KEY_Up:
-                log.debug("go home")
-                self.load_uri(self.history_home)
-                return True
+    def twv_on_button_press(self, widget, event):
+        (ok, button) = event.get_button()
+
+        if button == 8:
+            self.go_back()
+            return True
+        if button == 9:
+            #self.go_forward()
+            return True
+
+        # handle pasting of primary selection
+        if button == Gdk.BUTTON_MIDDLE:
+            if self.tvbuffer.get_selection_bounds():
+                # if the selection comes from us
+                # we paste it at pointer location
+                return False
+
+            # if the selection does not come from us
+            # we paste put it at cursor location
+            if self.primary_selection.wait_is_text_available():
+                txt = self.primary_selection.wait_for_text()
+                if txt:
+                    self.tvbuffer.insert_at_cursor(txt)
+                    return True
 
         return False
 
