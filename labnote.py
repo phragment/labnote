@@ -61,6 +61,12 @@ from gi.repository import GtkSource
 import docutils
 import docutils.core
 
+# TODO
+# - git
+#   - add file if created by paste
+#   - commit before push on exit (currently only on file change)
+#   - state in statusbar?
+#   libgit2 via pygit2 ?
 
 class mainwindow():
 
@@ -314,35 +320,6 @@ class mainwindow():
 
     def info_box_button_cancel_clicked(self, widget):
         self.info.set_reveal_child(False)
-
-
-    def on_search_key(self, widget, event):
-
-        if event.keyval == Gdk.KEY_Escape:
-            self.lock_line = 0
-            self.searchr.set_reveal_child(False)
-            self.search_results_sw.hide()
-            self.webview.show()
-
-
-    # search result activated
-    def on_search_result(self, treeview, it, path):
-
-        selection = treeview.get_selection()
-        (model, pathlist) = selection.get_selected_rows()
-        it = model.get_iter(pathlist[0])
-        res_file = model.get_value(it, 1)
-        res_line = int(model.get_value(it, 0)) - 1
-
-        if self.search_mode == "global":
-            self.load_uri(res_file)
-
-        if self.search_mode == "local":
-            it_ = self.tvbuffer.get_iter_at_line(res_line)
-            self.textview.scroll_to_iter(it_, 0, True, 0.0, 0.0)
-
-            self.lock_line = res_line
-            self.buffer_changed(self.tvbuffer)
 
 
     def window_on_key_press(self, widget, event):
@@ -615,6 +592,8 @@ class mainwindow():
 
 
     def uri_scheme_deny(self, request):
+        # TODO
+        # .. image:: http://example.org/foo.jpg
 
         # GLib-GObject-WARNING **: invalid cast from 'WebKitSoupRequestGeneric' to 'SoupRequestHTTP'
         # libsoup-CRITICAL **: soup_request_http_get_message: assertion 'SOUP_IS_REQUEST_HTTP (http)' failed
@@ -840,18 +819,57 @@ class mainwindow():
             for r in res:
                 self.search_results.append(r)
 
+            # TODO
+            # jump to first result?
+
         if self.search_mode == "local":
             res = search(pattern, self.current_file)
 
             for r in res:
                 self.search_results.append(r)
 
+            # jump to first result
             if res:
-                it = self.tvbuffer.get_iter_at_line(int(res[0][0])-1)
-                self.textview.scroll_to_iter(it, 0, True, 0.0, 0.0)
+                res_line = int(res[0][0]) - 1
+                it_ = self.tvbuffer.get_iter_at_line(res_line)
+                self.textview.scroll_to_iter(it_, 0, True, 0.0, 0.0)
+                self.lock_line = res_line
+                self.buffer_changed(self.tvbuffer)
 
         self.webview.hide()
         self.search_results_sw.show()
+
+
+    # search result activated
+    def on_search_result(self, treeview, it, path):
+
+        selection = treeview.get_selection()
+        (model, pathlist) = selection.get_selected_rows()
+        it = model.get_iter(pathlist[0])
+        res_file = model.get_value(it, 1)
+        res_line = int(model.get_value(it, 0)) - 1
+
+        if self.search_mode == "global":
+            self.load_uri(res_file)
+
+            # TODO
+            # jump to first occurence
+
+        if self.search_mode == "local":
+            it_ = self.tvbuffer.get_iter_at_line(res_line)
+            self.textview.scroll_to_iter(it_, 0, True, 0.0, 0.0)
+
+            self.lock_line = res_line
+            self.buffer_changed(self.tvbuffer)
+
+
+    def on_search_key(self, widget, event):
+
+        if event.keyval == Gdk.KEY_Escape:
+            self.lock_line = 0
+            self.searchr.set_reveal_child(False)
+            self.search_results_sw.hide()
+            self.webview.show()
 
 
     def on_delete_event(self, widget, event):
