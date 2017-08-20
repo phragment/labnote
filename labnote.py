@@ -30,6 +30,7 @@ import string
 import subprocess
 import sys
 import tempfile
+import threading
 import urllib
 import urllib.request
 import urllib.parse
@@ -82,6 +83,8 @@ class mainwindow():
         # callback in webkit thread
         self.update_lock = False
         self.update_deferred = False
+
+        self.deferred_line = 0
 
         self.current_file = ""
 
@@ -567,6 +570,21 @@ class mainwindow():
             log.debug("----------")
             self.unlock()
 
+            fred = threading.Thread(target=self.deferred)
+            fred.daemon = True
+            fred.start()
+
+
+    def deferred(self):
+
+        if self.deferred_line:
+            log.debug("deferred jump")
+            self.lock_line = self.deferred_line
+            # GLib.idle_add not needed
+            # request is "syncronized" via WebKit process
+            self.buffer_changed(self.tvbuffer)
+            self.deferred_line = 0
+
 
     def disable_context_menu(self, view, menu, event, hittestresult):
         return True
@@ -819,9 +837,6 @@ class mainwindow():
             for r in res:
                 self.search_results.append(r)
 
-            # TODO
-            # jump to first result?
-
         if self.search_mode == "local":
             res = search(pattern, self.current_file)
 
@@ -850,10 +865,8 @@ class mainwindow():
         res_line = int(model.get_value(it, 0)) - 1
 
         if self.search_mode == "global":
+            self.deferred_line = res_line
             self.load_uri(res_file)
-
-            # TODO
-            # jump to first occurence
 
         if self.search_mode == "local":
             it_ = self.tvbuffer.get_iter_at_line(res_line)
