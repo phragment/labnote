@@ -68,6 +68,7 @@ import docutils.core
 #   - commit before push on exit (currently only on file change)
 #   - state in statusbar?
 #   libgit2 via pygit2 ?
+# - quick insert utf8 symbols, arrows etc.
 
 class mainwindow():
 
@@ -155,11 +156,16 @@ class mainwindow():
 
         ## SourceView
         self.textview = GtkSource.View()
-        #self.textview.modify_font(Pango.FontDescription("DejaVu Sans Mono Book 10"))
-        self.textview.modify_font(Pango.FontDescription("Liberation Mono 10"))
+        self.textview.modify_font(Pango.FontDescription("DejaVu Sans Mono 10"))
+        #self.textview.modify_font(Pango.FontDescription("Liberation Mono 10"))
         self.textview.set_tab_width(2)
         self.textview.set_insert_spaces_instead_of_tabs(True)
         self.textview.set_show_line_numbers(True)
+        self.textview.set_right_margin_position(80)
+        self.textview.set_show_right_margin(True)
+        self.textview.set_highlight_current_line(True)
+        #self.textview.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.textview.set_wrap_mode(Gtk.WrapMode.NONE)
         self.textview.set_auto_indent(True)
         self.textview.set_smart_home_end(True)
         self.tvbuffer = self.textview.get_buffer()
@@ -199,9 +205,10 @@ class mainwindow():
         # streams for playback."
         settings.set_enable_mediasource(False)
 
-        settings.set_default_font_family("DejaVu Sans")
-        #settings.set_default_font_family("Liberation Sans")
-        settings.set_monospace_font_family("Liberation Mono")
+        #settings.set_default_font_family("DejaVu")
+        settings.set_serif_font_family("DejaVu Serif")
+        settings.set_sans_serif_font_family("DejaVu Sans")
+        settings.set_monospace_font_family("DejaVu Sans Mono")
         settings.set_default_font_size(14)
         settings.set_minimum_font_size(12)
 
@@ -468,6 +475,8 @@ class mainwindow():
 
                 if self.clipboard.wait_is_text_available():
                     txt = self.clipboard.wait_for_text()
+                    if not txt:
+                        return True
                     sel = self.tvbuffer.get_selection_bounds()
                     self.lock()
                     if sel:
@@ -1091,7 +1100,7 @@ def tex2pdf(tex, srcdir, pdfpath):
     for i in range(0, 4):
         (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
         if ret != 0:
-            log.warn(out)
+            log.error(out)
             if not log.isEnabledFor(logging.DEBUG):
                 shutil.rmtree(tmpdir)
             return False
@@ -1099,7 +1108,6 @@ def tex2pdf(tex, srcdir, pdfpath):
             continue
         else:
             shutil.move(os.path.join(tmpdir, "labnote.pdf"), pdfpath)
-            #shutil.move(os.path.join(tmpdir, "labnote.tex"), "/tmp/labnote.tex")
             shutil.rmtree(tmpdir)
             return True
 

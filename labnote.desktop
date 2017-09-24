@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=LabNote
+Comment=
+Exec=labnote
+Terminal=false
+Type=Application
+Icon=text-x-generic-symbolic
+Categories=Utility;TextEditor;
+StartupNotify=false
