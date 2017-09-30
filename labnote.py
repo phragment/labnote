@@ -537,7 +537,7 @@ class mainwindow():
         self.update_lock = False
         if self.update_deferred:
             self.update_deferred = False
-            self.buffer_changed(self.tvbuffer)
+            self.update_textview()
 
     def lock(self):
         if self.update_lock:
@@ -588,8 +588,7 @@ class mainwindow():
             self.lock_line = self.deferred_line
             # GLib.idle_add not needed
             # request is "synchronized" via WebKit process
-            # FIXME this marks the file as modified, split buffer_changed
-            self.buffer_changed(self.tvbuffer)
+            self.update_textview()
             self.deferred_line = 0
 
 
@@ -789,12 +788,16 @@ class mainwindow():
         if not self.lock():
             return
 
+        self.state_file.set_label("modified")
+
+        self.update_textview()
+
+    def update_textview(self):
+
         if log.isEnabledFor(logging.INFO):
             self.time_start = datetime.datetime.now()
 
-        self.state_file.set_label("modified")
-
-        rst = textbuf.props.text
+        rst = self.tvbuffer.props.text
 
         html = self.render(rst, lock=True)
 
@@ -845,9 +848,10 @@ class mainwindow():
             if res:
                 res_line = int(res[0][0]) - 1
                 it_ = self.tvbuffer.get_iter_at_line(res_line)
+                # TODO move cursor?
                 self.textview.scroll_to_iter(it_, 0, True, 0.0, 0.0)
                 self.lock_line = res_line
-                self.buffer_changed(self.tvbuffer)
+                self.update_textview()
 
         self.webview.hide()
         self.search_results_sw.show()
@@ -868,11 +872,11 @@ class mainwindow():
 
         if self.search_mode == "local":
             it_ = self.tvbuffer.get_iter_at_line(res_line)
+            # TODO move cursor?
             self.textview.scroll_to_iter(it_, 0, True, 0.0, 0.0)
 
             self.lock_line = res_line
-            # FIXME this marks the file as modified
-            self.buffer_changed(self.tvbuffer)
+            self.update_textview()
 
 
     def on_search_key(self, widget, event):
