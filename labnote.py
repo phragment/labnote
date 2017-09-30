@@ -294,13 +294,10 @@ class mainwindow():
         self.state = Gtk.Label()
         self.state_file = Gtk.Label()
         self.state_file.set_justify(Gtk.Justification.RIGHT)
-        self.state_editor = Gtk.Label()
-        self.state_editor.set_justify(Gtk.Justification.RIGHT)
         space = Gtk.Label()
         statusbar.pack_start(self.state, False, False, 3)
         statusbar.pack_start(space, True, True, 0)
         statusbar.pack_start(self.state_file, False, False, 6)
-        statusbar.pack_start(self.state_editor, False, False, 3)
 
         self.clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
         self.primary_selection = Gtk.Clipboard.get(Gdk.SELECTION_PRIMARY)
@@ -590,7 +587,8 @@ class mainwindow():
             log.debug("deferred jump")
             self.lock_line = self.deferred_line
             # GLib.idle_add not needed
-            # request is "syncronized" via WebKit process
+            # request is "synchronized" via WebKit process
+            # FIXME this marks the file as modified, split buffer_changed
             self.buffer_changed(self.tvbuffer)
             self.deferred_line = 0
 
@@ -694,7 +692,6 @@ class mainwindow():
 
                 self.state_file.set_label("")
                 self.state.set_label("")
-                self.update_editor_state()
                 return
 
             self.open_uri(uri)
@@ -787,13 +784,6 @@ class mainwindow():
         request.finish(stream, -1, None)
 
 
-    def update_editor_state(self):
-
-        wcc = self.tvbuffer.get_char_count()
-        wcl = self.tvbuffer.get_line_count()
-        self.state_editor.set_label(str(wcl) + ", " + str(wcc))
-
-
     def buffer_changed(self, textbuf):
 
         if not self.lock():
@@ -803,7 +793,6 @@ class mainwindow():
             self.time_start = datetime.datetime.now()
 
         self.state_file.set_label("modified")
-        self.update_editor_state()
 
         rst = textbuf.props.text
 
@@ -882,6 +871,7 @@ class mainwindow():
             self.textview.scroll_to_iter(it_, 0, True, 0.0, 0.0)
 
             self.lock_line = res_line
+            # FIXME this marks the file as modified
             self.buffer_changed(self.tvbuffer)
 
 
