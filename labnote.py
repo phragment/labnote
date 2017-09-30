@@ -65,10 +65,14 @@ import docutils.core
 # TODO
 # - git
 #   - add file if created by paste
-#   - commit before push on exit (currently only on file change)
+#   - "commit -a" before push on exit?
+#     (currently only on file change)
 #   - state in statusbar?
 #   libgit2 via pygit2 ?
 # - quick insert utf8 symbols, arrows etc.
+# - better focus handling
+#   - startup
+#   - after closing searchbar
 
 class mainwindow():
 
@@ -797,6 +801,11 @@ class mainwindow():
         if log.isEnabledFor(logging.INFO):
             self.time_start = datetime.datetime.now()
 
+        if self.deferred_line:
+            # set cursor
+            it = self.tvbuffer.get_iter_at_line(self.deferred_line)
+            self.tvbuffer.place_cursor(it)
+
         rst = self.tvbuffer.props.text
 
         html = self.render(rst, lock=True)
@@ -847,9 +856,9 @@ class mainwindow():
             # jump to first result
             if res:
                 res_line = int(res[0][0]) - 1
-                it_ = self.tvbuffer.get_iter_at_line(res_line)
-                # TODO move cursor?
-                self.textview.scroll_to_iter(it_, 0, True, 0.0, 0.0)
+                it = self.tvbuffer.get_iter_at_line(res_line)
+                self.tvbuffer.place_cursor(it)
+                self.textview.scroll_to_iter(it, 0, True, 0.0, 0.0)
                 self.lock_line = res_line
                 self.update_textview()
 
@@ -872,7 +881,7 @@ class mainwindow():
 
         if self.search_mode == "local":
             it_ = self.tvbuffer.get_iter_at_line(res_line)
-            # TODO move cursor?
+            self.tvbuffer.place_cursor(it_)
             self.textview.scroll_to_iter(it_, 0, True, 0.0, 0.0)
 
             self.lock_line = res_line
