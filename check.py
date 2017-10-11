@@ -15,9 +15,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import argparse
 import contextlib
 import io
 import os
+import re
 import sys
 
 import docutils
@@ -50,25 +52,60 @@ def ref2path(ref, curdir, startdir):
 
 
 def rst2dtree(rst):
-    null = io.StringIO()
-    with contextlib.redirect_stderr(null):
+
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
         try:
             dtree = docutils.core.publish_doctree(rst)
         except docutils.utils.SystemMessage as e:
             dtree = None
-    return dtree
+            print("parsing failed", e)
+    return err.getvalue(), dtree
 
-def handle_rst(f, cd, sd):
 
+rechar = u"\u02FD"
+def handle_spaces(rstin):
+    rstout = ""
+    reg = re.compile("`.*<.* .*>`_")
+    for line in rstin.splitlines():
+        mat = reg.search(line)
+        if mat:
+            state = 0
+            tl = ""
+            for (i, c) in enumerate(line):
+                if state == 0 and c == '`':
+                    state = 1
+                if state == 1 and c == '<':
+                    state = 2
+                if state == 2 and c == '`':
+                    state = 0
+                if state == 2 and c == ' ':
+                    c = rechar
+                tl += c
+            line = tl
+        rstout += line + "\n"
+    return rstout
+
+
+def handle_rst(f, cd, sd, verbose):
+
+    filepath = os.path.join(cd, f)
     rst = None
-    with open(os.path.join(cd, f), "r") as fh:
+    with open(filepath, "r") as fh:
         rst = fh.read()
 
     if not rst:
         print("file deleted since walk:", f)
         return []
 
-    dtree = rst2dtree(rst)
+    rst = handle_spaces(rst)
+    (err, dtree) = rst2dtree(rst)
+    if err and verbose:
+        print("----------")
+        print("error while parsing:", filepath)
+        print("")
+        print(err)
+        print("")
 
     if not dtree:
         print("error parsing file:", f)
@@ -98,16 +135,16 @@ def handle_rst(f, cd, sd):
 
 
         p = ref2path(ref, cd, sd)
+        p = p.replace(rechar, " ")
 
         if not p:
             print("could not parse", ref)
             continue
 
-        # TODO give line numbers for references
         if not os.path.exists(p):
             print("")
             print(f)
-            print("referenced file missing:", ref)
+            print("referenced file in line {} missing: {}".format(elem.parent.line, ref))
             print(p)
             continue
 
@@ -120,7 +157,14 @@ def handle_rst(f, cd, sd):
 
 if __name__ == "__main__":
 
-    startdir = os.path.abspath(sys.argv[1])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument("path")
+    args = parser.parse_args()
+    dirpath = args.path
+
+    print("==========")
+    startdir = os.path.abspath(dirpath)
     print("checking:", startdir)
 
     os.chdir(startdir)
@@ -131,9 +175,6 @@ if __name__ == "__main__":
 
     for cd, subdirs, files in os.walk(startdir):
 
-        #print("")
-        #print(cd, subdirs, files)
-
         if ".git" in cd:
             continue
 
@@ -143,7 +184,7 @@ if __name__ == "__main__":
                 continue
 
             if f.endswith(".rst"):
-                r = handle_rst(f, cd, startdir)
+                r = handle_rst(f, cd, startdir, args.verbose)
                 refs.extend(r)
                 rst.append(os.path.join(cd, f))
             else:
@@ -153,7 +194,8 @@ if __name__ == "__main__":
     print("rst not referenced:")
     for f in rst:
         if f not in refs:
-            print(f)
+            if f != startdir + "/index.rst":
+                print(f)
 
     # check if all nonrst in refs
     print("")
@@ -161,4 +203,8 @@ if __name__ == "__main__":
     for f in nonrst:
         if f not in refs:
             print(f)
+
+    print("")
+    print("==========")
+
 

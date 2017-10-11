@@ -41,6 +41,9 @@ import urllib.parse
 #   gir1.2-gtksource-3.0
 #   python3-docutils
 
+# Arch
+# ttf-dejavu
+
 # python-gobject
 import gi
 gi.require_version('Gtk', '3.0')
@@ -59,20 +62,27 @@ from gi.repository import GtkSource
 
 # python-docutils
 #   python-pygments (code highlighting)
+#   ttf-droid
 import docutils
 import docutils.core
 
 # TODO
 # - git
 #   - add file if created by paste
+#   - on ext file open, check if added (only in tree)
 #   - "commit -a" before push on exit?
 #     (currently only on file change)
+#     - only commit on own change?
 #   - state in statusbar?
 #   libgit2 via pygit2 ?
 # - quick insert utf8 symbols, arrows etc.
 # - better focus handling
 #   - startup
 #   - after closing searchbar
+# - fixed size allocation?
+# - option for manual sync of scrollpos
+#   webkit -> textview
+# - reset buffer history on save?
 
 class mainwindow():
 
@@ -395,7 +405,7 @@ class mainwindow():
             if event.keyval == ord("E"):
                 log.debug("start export")
                 self.state.set_label("exporting")
-                # TODO should be async after here
+                # FIXME should be async after here
 
                 rst = self.tvbuffer.props.text
 
@@ -620,7 +630,7 @@ class mainwindow():
 
 
     def uri_scheme_deny(self, request):
-        # TODO
+        # FIXME
         # .. image:: http://example.org/foo.jpg
 
         # GLib-GObject-WARNING **: invalid cast from 'WebKitSoupRequestGeneric' to 'SoupRequestHTTP'
@@ -933,6 +943,9 @@ class mainwindow():
         if stylepath:
             args["stylesheet_path"] = ""
             args["stylesheet"] = stylepath
+            mathstyle = self.config["math_style"]
+            if mathstyle:
+                args["math_output"] = "HTML " + os.path.join(os.path.dirname(stylepath), mathstyle)
 
         if lock or self.lock_line:
             # get current line
@@ -983,6 +996,7 @@ class mainwindow():
         with devnull():
             try:
                 html = docutils.core.publish_from_doctree(dtree, writer_name="html4css1", settings=None, settings_overrides=args)
+                #html = docutils.core.publish_from_doctree(dtree, writer_name="html5", settings=None, settings_overrides=args)
             except docutils.utils.SystemMessage as e:
                 html = "<body>Error<br>" + str(e) + "</body>"
             except AttributeError as e:
@@ -1258,6 +1272,7 @@ class ConfigParser():
         default_path = ~/notes/index.rst
         sourceview_scheme = default
         webview_style = 
+        math_style = 
         layout_vertical = False
         editor_first = False
         """
@@ -1305,6 +1320,12 @@ class ConfigParser():
             self.config["webview_style"] = os.path.join(config_dir, style)
         else:
             self.config["webview_style"] = None
+
+        math = self.parser.get("labnote", "math_style")
+        if math:
+            self.config["math_style"] = math
+        else:
+            self.config["math_style"] = None
 
         self.config["editor_first"] = self.parser.getboolean("labnote", "editor_first")
 
