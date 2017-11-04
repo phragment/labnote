@@ -135,7 +135,7 @@ class mainwindow():
         else:
             window_rect = screen.get_monitor_geometry(0)
 
-        width  = window_rect.width  * 0.75
+        width = window_rect.width * 0.75
         height = window_rect.height * 0.75
         self.window.set_size_request(int(width), int(height))
 
@@ -143,7 +143,7 @@ class mainwindow():
 
 
         ##
-        vbox = Gtk.Box(orientation = Gtk.Orientation.VERTICAL)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.window.add(vbox)
 
 
@@ -154,7 +154,7 @@ class mainwindow():
         tb_back.connect("clicked", self.go_back)
 
 
-        toolbox = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL)
+        toolbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
         self.entry = Gtk.Entry()
         self.entry.connect("activate", self.on_entry_act)
@@ -184,7 +184,9 @@ class mainwindow():
         self.textview.set_smart_home_end(True)
         self.tvbuffer = self.textview.get_buffer()
         self.tvbuffer.props.language = GtkSource.LanguageManager.get_default().get_language('rst')
-        self.tvbuffer.props.style_scheme = GtkSource.StyleSchemeManager.get_default().get_scheme(self.config["sourceview_scheme"])
+        ssm = GtkSource.StyleSchemeManager.get_default()
+        scheme = ssm.get_scheme(self.config["sourceview_scheme"])
+        self.tvbuffer.props.style_scheme = scheme
 
         self.textview.connect("size-allocate", self.textview_on_size_allocate)
         self.tvbuffer.connect("changed", self.buffer_changed)
@@ -247,9 +249,9 @@ class mainwindow():
         self.treeview.set_headers_visible(False)
 
         columns = ["filepath", "line", "lineno"]
-        for i in range(len(columns)):
+        for (i, column) in enumerate(columns):
             cell = Gtk.CellRendererText()
-            col = Gtk.TreeViewColumn(columns[i], cell, text=i)
+            col = Gtk.TreeViewColumn(column, cell, text=i)
             col.set_sizing(Gtk.TreeViewColumnSizing.AUTOSIZE)
             if i == 0:
                 col.set_alignment(1.0)
@@ -263,7 +265,7 @@ class mainwindow():
         self.search_results_sw.add(self.treeview)
 
         # homogeneous, spacing
-        hbox = Gtk.Box(orientation = self.config["layout"])
+        hbox = Gtk.Box(orientation=self.config["layout"])
         if self.config["editor_first"]:
             # expand, fill, padding
             hbox.pack_start(scrolledwindow, True, True, 1)
@@ -288,7 +290,7 @@ class mainwindow():
 
         self.info = Gtk.Revealer()
         vbox.pack_start(self.info, False, False, 2)
-        info_box = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL)
+        info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.info.add(info_box)
         info_box_label = Gtk.Label("No write since last change. Proceed?")
         info_box.pack_start(info_box_label, False, False, 3)
@@ -302,7 +304,7 @@ class mainwindow():
         info_box.pack_end(info_box_button_cancel, False, False, 0)
 
 
-        statusbar = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL)
+        statusbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         vbox.pack_start(statusbar, False, False, 0)
 
         # TODO rename to msg and add helper functions (ie clearing after 5s)
@@ -355,10 +357,7 @@ class mainwindow():
 
                 #
                 if self.git:
-                    if not os.path.exists(self.current_file):
-                        gitadd = True
-                    else:
-                        gitadd = False
+                    gitadd = bool(os.path.exists(self.current_file))
 
                 filedir = os.path.dirname(self.current_file)
                 if filedir:
@@ -409,7 +408,7 @@ class mainwindow():
 
                 rst = self.tvbuffer.props.text
 
-                title = self.current_file.replace("_", "\_")
+                title = self.current_file.replace("_", "\_")  # pylint: disable=anomalous-backslash-in-string
                 if self.git:
                     rev = git_get_rev(self.current_file)
                 else:
@@ -562,7 +561,6 @@ class mainwindow():
 
 
     def unlock(self):
-        #log.info("unlock update")
         self.update_lock = False
         if self.update_deferred:
             self.update_deferred = False
@@ -570,13 +568,11 @@ class mainwindow():
 
     def lock(self):
         if self.update_lock:
-            #log.info("update deferred")
             self.update_deferred = True
             return False
-        else:
-            #log.info("lock update, try ok")
-            self.update_lock = True
-            return True
+
+        self.update_lock = True
+        return True
 
 
     def load_uri(self, uri):
@@ -742,7 +738,7 @@ class mainwindow():
             ret = subprocess.call(["/usr/bin/xdg-open", uri],
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if ret != 0:
-            log.warn("could not be opened")
+            log.warning("could not be opened")
 
 
     def load_img(self, uri, request):
@@ -750,7 +746,7 @@ class mainwindow():
         try:
             stream = Gio.file_new_for_path(uri).read()
             request.finish(stream, -1, None)
-        except GLib.Error:
+        except GLib.Error:  # pylint: disable=catching-non-exception
             stream = Gio.MemoryInputStream.new_from_data("file not found".encode())
             request.finish(stream, -1, None)
 
@@ -765,7 +761,7 @@ class mainwindow():
                     if self.history_stack[-1] != self.current_file:
                         self.history_stack.append(self.current_file)
                 except IndexError:
-                        self.history_stack.append(self.current_file)
+                    self.history_stack.append(self.current_file)
         else:
             self.history_ignore = False
         log.debug("history\n" + str(self.history_stack))
@@ -846,7 +842,7 @@ class mainwindow():
 
 
     def go_back(self, widget=None):
-        if len(self.history_stack):
+        if self.history_stack:
             self.history_ignore = True
             self.load_uri(self.history_stack[-1])
             del self.history_stack[-1]
@@ -1233,7 +1229,6 @@ def git_get_rev(filename):
     rev = "r" + cnt + "." + hsh
     (ret, drt) = run(["git", "status", "--porcelain", filename])
     # ?? untracked
-    # 
     log.debug("ret: " + str(ret))
     log.debug("drt: " + drt)
     if drt:
@@ -1277,7 +1272,7 @@ class devnull():
         sys.stdout = self.devnull
         sys.stderr = self.devnull
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, type_, value, traceback):
         sys.stdout = sys.__stdout__
         sys.stderr = sys.__stderr__
 
@@ -1295,10 +1290,11 @@ class ConfigParser():
         layout_vertical = False
         editor_first = False
         """
+        self.parser = configparser.SafeConfigParser()
+        self.config = {}
 
     def get_config(self):
 
-        self.parser = configparser.SafeConfigParser()
         self.parser.read_string(self.default)
 
         config_home = os.getenv("XDG_CONFIG_HOME")
@@ -1318,9 +1314,6 @@ class ConfigParser():
             config_file = open(config_path, "w")
             self.parser.write(config_file)
             config_file.close()
-
-
-        self.config = {}
 
         default_path = self.parser.get("labnote", "default_path")
         if default_path:
