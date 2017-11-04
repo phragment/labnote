@@ -305,6 +305,7 @@ class mainwindow():
         statusbar = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL)
         vbox.pack_start(statusbar, False, False, 0)
 
+        # TODO rename to msg and add helper functions (ie clearing after 5s)
         self.state = Gtk.Label()
         self.state_file = Gtk.Label()
         self.state_file.set_justify(Gtk.Justification.RIGHT)
@@ -405,7 +406,6 @@ class mainwindow():
             if event.keyval == ord("E"):
                 log.debug("start export")
                 self.state.set_label("exporting")
-                # FIXME should be async after here
 
                 rst = self.tvbuffer.props.text
 
@@ -418,15 +418,14 @@ class mainwindow():
 
                 tex = rst2tex(rst, title, rev, dt)
                 if not tex:
-                    self.state.set_label("export failed")
+                    self.state.set_label("export failed (rst to tex)")
                     return True
 
-                tex2pdf(tex, os.path.dirname(self.current_file), "/tmp/labnote.pdf")
-
-                self.open_uri("/tmp/labnote.pdf")
-                log.debug("export done")
-                self.state.set_label("")
-
+                export = threading.Thread(target=tex2pdf,
+                                          args=[tex, os.path.dirname(self.current_file),
+                                                "/tmp/labnote.pdf", self.export_done])
+                export.daemon = True
+                export.start()
                 return True
 
         # Alt
@@ -444,6 +443,22 @@ class mainwindow():
 
         return False
 
+
+    def export_done(self, err):
+
+        if not err:
+            log.debug("export done")
+            self.state.set_label("export done")
+            self.open_uri("/tmp/labnote.pdf")
+        else:
+            log.debug("export failed")
+            self.state.set_label("export failed (tex to pdf)")
+
+    def set_state(self, state):
+        GLib.idle_add(self.set_state_cb, state)
+
+    def set_state_cb(self, state):
+        self.state.set_label(state)
 
     def twv_on_key_press(self, widget, event):
 
@@ -630,13 +645,12 @@ class mainwindow():
 
 
     def uri_scheme_deny(self, request):
-        # FIXME
         # .. image:: http://example.org/foo.jpg
 
         # GLib-GObject-WARNING **: invalid cast from 'WebKitSoupRequestGeneric' to 'SoupRequestHTTP'
         # libsoup-CRITICAL **: soup_request_http_get_message: assertion 'SOUP_IS_REQUEST_HTTP (http)' failed
 
-        # this is not called!
+        # this is never executed
         log.debug("uri scheme denied " + request.get_uri())
         err = GLib.Error("load cancelled: extern")
         request.finish_error(err)
@@ -1103,7 +1117,7 @@ def rst2tex(rst, title, rev, stamp):
 
     return tex.decode()
 
-def tex2pdf(tex, srcdir, pdfpath):
+def tex2pdf(tex, srcdir, pdfpath, cb):
     srcdir = os.path.abspath(srcdir)
     pdfpath = os.path.abspath(pdfpath)
 
@@ -1114,19 +1128,24 @@ def tex2pdf(tex, srcdir, pdfpath):
     with open(os.path.join(tmpdir, "labnote.tex"), "w") as f:
         f.write(tex)
 
+    err = True
     for i in range(0, 4):
         (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
         if ret != 0:
             log.error(out)
             if not log.isEnabledFor(logging.DEBUG):
                 shutil.rmtree(tmpdir)
-            return False
+            break
         if "Rerun" in out:
             continue
         else:
             shutil.move(os.path.join(tmpdir, "labnote.pdf"), pdfpath)
             shutil.rmtree(tmpdir)
-            return True
+            err = False
+            break
+
+    GLib.idle_add(cb, err)
+
 
 def copytree(src, dst):
     # behaves like "mv src/* dst/"
