@@ -191,6 +191,11 @@ if __name__ == "__main__":
                 nonrst.append(os.path.join(cd, f))
 
     print("")
+    print("stats")
+    print("files", len(rst))
+    print("references", len(refs))
+
+    print("")
     print("rst not referenced:")
     for f in rst:
         if f not in refs:

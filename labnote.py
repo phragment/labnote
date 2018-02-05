@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2016-2017 Thomas Krug
+# Copyright 2016-2018 Thomas Krug
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -83,6 +83,7 @@ import docutils.core
 # - option for manual sync of scrollpos
 #   webkit -> textview
 # - reset buffer history on save?
+# - lock loading (ie file change on search)
 
 class mainwindow():
 
