@@ -31,6 +31,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib
 import urllib.request
 import urllib.parse
@@ -62,7 +63,7 @@ from gi.repository import GtkSource
 
 # python-docutils
 #   python-pygments (code highlighting)
-#   ttf-droid
+#   ttf-droid (better formula view)
 import docutils
 import docutils.core
 
@@ -84,6 +85,11 @@ import docutils.core
 #   webkit -> textview
 # - reset buffer history on save?
 # - lock loading (ie file change on search)
+#
+# rST
+# - latex export emits \href instead of \includegraphics on image, when secifying :target:
+# - rst does not handle spaces in references
+#
 
 class mainwindow():
 
@@ -183,6 +189,21 @@ class mainwindow():
         self.textview.set_wrap_mode(Gtk.WrapMode.NONE)
         self.textview.set_auto_indent(True)
         self.textview.set_smart_home_end(True)
+
+        # show trailing whitespace
+        self.textview.set_draw_spaces(GtkSource.DrawSpacesFlags.SPACE |
+                                      GtkSource.DrawSpacesFlags.TAB |
+                                      GtkSource.DrawSpacesFlags.TRAILING)
+        ## new way (gtk >= 3.24)
+        #spacedrawer = self.textview.get_space_drawer()
+        ## display all trailing whitespaces
+        #spacedrawer.set_types_for_locations(GtkSource.SpaceLocationFlags.TRAILING,
+        #                                    GtkSource.SpaceTypeFlags.ALL)
+        ## display non-breaking space chars
+        #spacedrawer.set_types_for_locations(GtkSource.SpaceLocationFlags.ALL,
+        #                                    GtkSource.SpaceTypeFlags.NBSP)
+        #spacedrawer.set_enable_matrix(True)
+
         self.tvbuffer = self.textview.get_buffer()
         self.tvbuffer.props.language = GtkSource.LanguageManager.get_default().get_language('rst')
         ssm = GtkSource.StyleSchemeManager.get_default()
@@ -596,7 +617,7 @@ class mainwindow():
             self.load_state = 2
             log.debug("load finished")
             if log.isEnabledFor(logging.INFO):
-                self.time_stop = datetime.datetime.now()
+                self.time_stop = time.process_time()
                 delta = self.time_stop - self.time_start
                 log.info(str(delta))
             log.debug("----------")
@@ -643,9 +664,13 @@ class mainwindow():
 
     def uri_scheme_deny(self, request):
         # .. image:: http://example.org/foo.jpg
-
-        # GLib-GObject-WARNING **: invalid cast from 'WebKitSoupRequestGeneric' to 'SoupRequestHTTP'
-        # libsoup-CRITICAL **: soup_request_http_get_message: assertion 'SOUP_IS_REQUEST_HTTP (http)' failed
+        #
+        # GLib-GObject-WARNING **: invalid cast from 'WebKitSoupRequestGeneric'
+        #   to 'SoupRequestHTTP'
+        # libsoup-CRITICAL **: soup_request_http_get_message:
+        #   assertion 'SOUP_IS_REQUEST_HTTP (http)' failed
+        #
+        # "Custom URI schemes are for new schemes, not for overriding existing ones."
 
         # this is never executed
         log.debug("uri scheme denied " + request.get_uri())
@@ -681,7 +706,7 @@ class mainwindow():
     def uri_scheme_file(self, request):
 
         if log.isEnabledFor(logging.INFO):
-            self.time_start = datetime.datetime.now()
+            self.time_start = time.process_time()
 
         uri = request.get_uri()
         log.debug("----------")
@@ -958,6 +983,7 @@ class mainwindow():
             if mathstyle:
                 args["math_output"] = "HTML " + os.path.join(os.path.dirname(stylepath), mathstyle)
 
+
         if lock or self.lock_line:
             # get current line
             cursor_mark = self.tvbuffer.get_insert()
@@ -1007,6 +1033,8 @@ class mainwindow():
         with devnull():
             try:
                 html = docutils.core.publish_from_doctree(dtree, writer_name="html4css1", settings=None, settings_overrides=args)
+                # HTML5 test
+                #args["math_output"] = "MathML"
                 #html = docutils.core.publish_from_doctree(dtree, writer_name="html5", settings=None, settings_overrides=args)
             except docutils.utils.SystemMessage as e:
                 html = "<body>Error<br>" + str(e) + "</body>"
@@ -1130,22 +1158,22 @@ def tex2pdf(tex, srcdir, pdfpath, cb):
         (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
         if ret != 0:
             log.error(out)
-            if not log.isEnabledFor(logging.DEBUG):
-                shutil.rmtree(tmpdir)
             break
         if "Rerun" in out:
             continue
         else:
             shutil.move(os.path.join(tmpdir, "labnote.pdf"), pdfpath)
-            shutil.rmtree(tmpdir)
             err = False
             break
+
+    if not log.isEnabledFor(logging.DEBUG):
+        shutil.rmtree(tmpdir)
 
     GLib.idle_add(cb, err)
 
 
 def copytree(src, dst):
-    # behaves like "mv src/* dst/"
+    # behaves like "cp src/* dst/"
     for f in os.listdir(src):
         s = os.path.join(src, f)
         d = os.path.join(dst, f)
@@ -1379,6 +1407,10 @@ if __name__ == "__main__":
     else:
         start = os.path.expanduser(config["path"])
     log.debug("startpath " + start)
+
+    # try to open default
+    if os.path.isdir(start):
+        start = os.path.join(start, "index.rst")
 
     mimetypes.init()
 

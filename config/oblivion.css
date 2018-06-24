@@ -1,9 +1,16 @@
+p {
+  margin-top: 0;
+  margin-bottom: 0.5em;
+}
+
 body {
   color: #d3d7cf;
   background-color: #2e3436;
+  line-height: 1.2;
 }
 
-img {
+div.figure > img,
+a.image-reference > img {
   display: block;
   max-width: 80%;
   max-height: 60%;
@@ -109,7 +116,7 @@ div.error p.admonition-title,
 div.warning p.admonition-title,
 .code .error {
   color: #ce5c00;
-  font-weight: bold ;
+  font-weight: bold;
   font-family: sans-serif;
 }
 
@@ -205,11 +212,14 @@ h2.subtitle {
 div.section h1 {
   padding-top: 20px;
   padding-bottom: 0px;
-  font-size: 110%;
+  font-size: 120%;
 }
 div.section h2 {
   padding-top: 10px;
   font-size: 110%;
+}
+div.section h3 {
+  padding-top: 10px;
 }
 
 hr.docutils {
