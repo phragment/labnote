@@ -81,8 +81,6 @@ import docutils.core
 #   - startup
 #   - after closing searchbar
 # - fixed size allocation?
-# - option for manual sync of scrollpos
-#   webkit -> textview
 # - reset buffer history on save?
 # - lock loading (ie file change on search)
 #
@@ -172,8 +170,8 @@ class mainwindow():
         vbox.pack_start(toolbox, False, False, 0)
 
 
-        scrolledwindow = Gtk.ScrolledWindow()
-        scrolledwindow.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        self.scrolledwindow = Gtk.ScrolledWindow()
+        self.scrolledwindow.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
 
         ## SourceView
         self.textview = GtkSource.View()
@@ -216,7 +214,7 @@ class mainwindow():
         um = self.tvbuffer.get_undo_manager()
         um.connect("can-undo-changed", self.buffer_undo)
 
-        scrolledwindow.add(self.textview)
+        self.scrolledwindow.add(self.textview)
 
 
         ## WebKit
@@ -290,13 +288,13 @@ class mainwindow():
         hbox = Gtk.Box(orientation=self.config["layout"])
         if self.config["editor_first"]:
             # expand, fill, padding
-            hbox.pack_start(scrolledwindow, True, True, 1)
+            hbox.pack_start(self.scrolledwindow, True, True, 1)
             hbox.pack_start(self.webview, True, True, 1)
             hbox.pack_start(self.search_results_sw, True, True, 0)
         else:
             hbox.pack_start(self.search_results_sw, True, True, 0)
             hbox.pack_start(self.webview, True, True, 1)
-            hbox.pack_start(scrolledwindow, True, True, 1)
+            hbox.pack_start(self.scrolledwindow, True, True, 1)
         vbox.pack_start(hbox, True, True, 0)
 
         # search
@@ -430,14 +428,17 @@ class mainwindow():
 
                 rst = self.tvbuffer.props.text
 
-                title = self.current_file.replace("_", "\_")  # pylint: disable=anomalous-backslash-in-string
+                meta = {}
+                meta["title"] = self.current_file.replace("_", "\_")  # pylint: disable=anomalous-backslash-in-string
                 if self.git:
-                    rev = git_get_rev(self.current_file)
+                    meta["rev"] = git_get_rev(self.current_file)
                 else:
-                    rev = ""
-                dt = datetime.datetime.now().strftime("%Y-%m-%d")
+                    meta["rev"] = ""
+                # TODO use git date, use current date only if no git or dirty
+                # git log -1 --date=iso-strict --format=%cd <file>
+                meta["dt"] = datetime.datetime.now().strftime("%Y-%m-%d")
 
-                tex = rst2tex(rst, title, rev, dt)
+                tex = rst2tex(rst, meta, self.config)
                 if not tex:
                     self.state.set_label("export failed (rst to tex)")
                     return True
@@ -460,6 +461,18 @@ class mainwindow():
             if event.keyval == Gdk.KEY_Up:
                 log.debug("go home")
                 self.load_uri(self.history_home)
+                return True
+
+            if event.keyval == Gdk.KEY_Down:
+                scroll = self.webview.get_title()
+                try:
+                    scroll = float(scroll)
+                except ValueError:
+                    scroll = 0
+                adj = self.scrolledwindow.get_vadjustment()
+                scale = adj.props.upper - adj.props.lower
+                adj.set_value(scroll * scale)
+                self.textview.set_vadjustment(adj)
                 return True
 
         return False
@@ -617,7 +630,7 @@ class mainwindow():
             self.load_state = 2
             log.debug("load finished")
             if log.isEnabledFor(logging.INFO):
-                self.time_stop = time.process_time()
+                self.time_stop = time.clock_gettime(time.CLOCK_MONOTONIC)
                 delta = self.time_stop - self.time_start
                 log.info(str(delta))
             log.debug("----------")
@@ -706,7 +719,7 @@ class mainwindow():
     def uri_scheme_file(self, request):
 
         if log.isEnabledFor(logging.INFO):
-            self.time_start = time.process_time()
+            self.time_start = time.clock_gettime(time.CLOCK_MONOTONIC)
 
         uri = request.get_uri()
         log.debug("----------")
@@ -845,7 +858,7 @@ class mainwindow():
     def update_textview(self):
 
         if log.isEnabledFor(logging.INFO):
-            self.time_start = datetime.datetime.now()
+            self.time_start = time.clock_gettime(time.CLOCK_MONOTONIC)
 
         if self.deferred_line:
             # set cursor
@@ -971,6 +984,7 @@ class mainwindow():
         rst = handle_spaces(rst)
 
         args = {
+            "_disable_config": True,
             "embed_stylesheet": True,
             "output_encoding": "unicode"
         }
@@ -1032,22 +1046,41 @@ class mainwindow():
 
         with devnull():
             try:
-                html = docutils.core.publish_from_doctree(dtree, writer_name="html4css1", settings=None, settings_overrides=args)
-                # HTML5 test
-                #args["math_output"] = "MathML"
-                #html = docutils.core.publish_from_doctree(dtree, writer_name="html5", settings=None, settings_overrides=args)
+                html = docutils.core.publish_from_doctree(dtree, writer_name="html4css1",
+                            settings_overrides=args)
+
             except docutils.utils.SystemMessage as e:
                 html = "<body>Error<br>" + str(e) + "</body>"
             except AttributeError as e:
                 # docutils: parser should support optionally omitting broken nodes
                 html = "<body>Error<br>" + str(e) + "</body>"
 
-        if lock or self.lock_line:
-            body = '<body onload="scroll()">'
-            html = re.sub(r'<body>', body, html, re.M)
+        script = "<head>\n<script>"
+        body = '<body onscroll="update()"'
 
-            script = "<head><script>function scroll() {document.getElementById('btj0m1ve').scrollIntoView();}</script>"
-            html = re.sub(r'<head>', script, html, re.M)
+        script += r"""
+        function update()
+        {
+            //var max = document.body.scrollHeight - window.innerHeight + 30;
+            var max = document.body.scrollHeight - window.innerHeight;
+            document.title = window.pageYOffset / max;
+        }
+        """
+
+        if lock or self.lock_line:
+            body += 'onload="scroll()"'
+
+            script += r"""
+            function scroll() {
+              document.getElementById('btj0m1ve').scrollIntoView();
+            }
+            """
+
+        body += '>'
+        html = re.sub(r'<body>', body, html, re.M)
+
+        script += "\n</script>"
+        html = re.sub(r'<head>', script, html, re.M)
 
         # debug output
         if log.isEnabledFor(logging.DEBUG):
@@ -1109,33 +1142,26 @@ def uri2path(uri, curdir, startdir):
     return uri_, ext
 
 
-def rst2tex(rst, title, rev, stamp):
+def rst2tex(rst, meta, conf):
 
-    preamble = r"""
-    \usepackage[left=2cm,right=2cm,top=1.5cm,bottom=1.5cm,includeheadfoot]{geometry}
-    \usepackage{parskip}
-    \usepackage{lmodern}
-    \usepackage{fancyhdr}
-    \fancyhf{}
-    \fancyhead[R]{\thepage}
-    \pagestyle{fancy}
-    \makeatletter
-    \let\ps@plain\ps@fancy
-    \usepackage[export]{adjustbox}
-    \let\oldincludegraphics\includegraphics
-    \renewcommand{\includegraphics}[2][]{\oldincludegraphics[#1, max width=0.8\textwidth, max height=0.4\textheight, keepaspectratio]{#2}}
-    """
+    preamble = r"\usepackage{fancyhdr}"
 
-    preamble += "\\fancyhead[L]{" + title + "}\n"
-    preamble += "\\fancyfoot[L]{" + rev   + "}\n"
-    preamble += "\\fancyfoot[R]{" + stamp + "}\n"
+    preamble_path = conf["latex_preamble"]
+    if preamble_path:
+        with open(preamble_path, "r") as preamble_file:
+            preamble = preamble_file.read()
 
-    args = {"latex_preamble": preamble}
+    preamble += "\\fancyhead[L]{" + meta["title"] + "}\n"
+    preamble += "\\fancyfoot[L]{" + meta["rev"]   + "}\n"
+    preamble += "\\fancyfoot[R]{" + meta["dt"] + "}\n"
+
+    args = {"latex_preamble": preamble,
+            "doctitle_xform": False}
 
     with devnull():
         try:
             tex = docutils.core.publish_string(rst, writer_name='latex',
-                                               settings=None, settings_overrides=args)
+                                               settings_overrides=args)
         except NotImplementedError:
             log.error("could not convert to tex")
             return None
@@ -1156,10 +1182,12 @@ def tex2pdf(tex, srcdir, pdfpath, cb):
     err = True
     for i in range(0, 4):
         (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug(out)
         if ret != 0:
             log.error(out)
             break
-        if "Rerun" in out:
+        if "Rerun" in out or "undefined references" in out:
             continue
         else:
             shutil.move(os.path.join(tmpdir, "labnote.pdf"), pdfpath)
@@ -1318,6 +1346,7 @@ class ConfigParser():
         math_style = 
         layout_vertical = False
         editor_first = False
+        latex_preamble = 
         """
         self.parser = configparser.SafeConfigParser()
         self.config = {}
@@ -1369,6 +1398,12 @@ class ConfigParser():
             self.config["math_style"] = None
 
         self.config["editor_first"] = self.parser.getboolean("labnote", "editor_first")
+
+        tex = self.parser.get("labnote", "latex_preamble")
+        if tex:
+            self.config["latex_preamble"] = os.path.join(config_dir, tex)
+        else:
+            self.config["latex_preamble"] = None
 
         return self.config
 

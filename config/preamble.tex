@@ -1,0 +1,25 @@
+\usepackage{parskip}
+\usepackage{lmodern}
+
+\usepackage[a4paper]{geometry}
+\geometry{left=2cm,right=2cm,top=1cm,bottom=1cm}
+\geometry{includeheadfoot}
+\geometry{headsep=5mm}
+\geometry{footskip=5mm}
+\geometry{nomarginpar}
+
+% footnotes can collide with footer!
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[R]{\thepage}
+
+\makeatletter
+\let\ps@plain\ps@fancy
+\makeatother
+
+\usepackage[export]{adjustbox}
+\let\oldincludegraphics\includegraphics
+\renewcommand{\includegraphics}[2][]{\oldincludegraphics[#1, max width=0.8\textwidth, max height=0.4\textheight, keepaspectratio]{#2}}
+
+
