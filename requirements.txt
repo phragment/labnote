@@ -1,0 +1,9 @@
+docutils==0.14
+
+# additional
+#Pygments==2.2.0
+
+# gtksourceview
+# webkit2gtk3
+pygobject==3.28.3
+
