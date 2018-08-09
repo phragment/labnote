@@ -69,14 +69,15 @@ import docutils.core
 
 # TODO
 # - git
-#   - write small wrapper
 #   - add file if created by paste
 #   - on ext file open, check if added (only in tree)
 #   - "commit -a" before push on exit?
 #     (currently only on file change)
 #     - only commit on own change?
 #   - state in statusbar?
-#   libgit2 via pygit2 ?
+#
+#   libgit2 via pygit2
+#   -> write small wrapper for git binary
 #
 # - quick insert utf8 symbols, arrows etc.
 # - better focus handling
@@ -122,7 +123,7 @@ class mainwindow():
         self.window.connect("delete-event", self.on_delete_event)
         self.window.connect("key-press-event", self.window_on_key_press)
         self.window.set_title("LabNote")
-        self.window.set_wmclass("default", "LabNote")
+        self.window.set_role("labnote")
 
         # set icon
         icon_theme = Gtk.IconTheme.get_default()
@@ -135,18 +136,7 @@ class mainwindow():
         self.window.set_default_icon_list(icon_list)
 
         # size & position
-        screen = self.window.get_screen()
-        win = screen.get_active_window()
-        if win:
-            mon = screen.get_monitor_at_window(win)
-            window_rect = screen.get_monitor_geometry(mon)
-        else:
-            window_rect = screen.get_monitor_geometry(0)
-
-        width = window_rect.width * 0.75
-        height = window_rect.height * 0.75
-        self.window.set_size_request(int(width), int(height))
-
+        self.window.set_size_request(1400, 800)
         self.window.set_position(Gtk.WindowPosition.CENTER)
 
 
@@ -178,8 +168,9 @@ class mainwindow():
 
         ## SourceView
         self.textview = GtkSource.View()
-        self.textview.modify_font(Pango.FontDescription("DejaVu Sans Mono 10"))
-        #self.textview.modify_font(Pango.FontDescription("Liberation Mono 10"))
+        # TODO set from theme (Gtk.Style) or config
+        #self.textview.override_font(Pango.FontDescription("DejaVu Sans Mono 10"))
+        self.textview.set_monospace(True)
         self.textview.set_tab_width(2)
         self.textview.set_insert_spaces_instead_of_tabs(True)
         self.textview.set_show_line_numbers(True)
@@ -191,19 +182,16 @@ class mainwindow():
         self.textview.set_auto_indent(True)
         self.textview.set_smart_home_end(True)
 
-        # show trailing whitespace
-        self.textview.set_draw_spaces(GtkSource.DrawSpacesFlags.SPACE |
-                                      GtkSource.DrawSpacesFlags.TAB |
-                                      GtkSource.DrawSpacesFlags.TRAILING)
-        ## new way (gtk >= 3.24)
-        #spacedrawer = self.textview.get_space_drawer()
-        ## display all trailing whitespaces
-        #spacedrawer.set_types_for_locations(GtkSource.SpaceLocationFlags.TRAILING,
-        #                                    GtkSource.SpaceTypeFlags.ALL)
-        ## display non-breaking space chars
-        #spacedrawer.set_types_for_locations(GtkSource.SpaceLocationFlags.ALL,
-        #                                    GtkSource.SpaceTypeFlags.NBSP)
-        #spacedrawer.set_enable_matrix(True)
+        # show trailing whitespace (gtk >= 3.24)
+        spacedrawer = self.textview.get_space_drawer()
+        # seems to turn all on
+        spacedrawer.set_enable_matrix(True)
+        # all off
+        spacedrawer.set_types_for_locations(GtkSource.SpaceLocationFlags.ALL,
+                                            GtkSource.SpaceTypeFlags.NONE)
+        # display all trailing whitespaces
+        spacedrawer.set_types_for_locations(GtkSource.SpaceLocationFlags.TRAILING,
+                                            GtkSource.SpaceTypeFlags.SPACE)
 
         self.tvbuffer = self.textview.get_buffer()
         self.tvbuffer.props.language = GtkSource.LanguageManager.get_default().get_language('rst')
@@ -244,10 +232,11 @@ class mainwindow():
         # streams for playback."
         settings.set_enable_mediasource(False)
 
+        # TODO set from theme (Gtk.Style) or config
         #settings.set_default_font_family("DejaVu")
-        settings.set_serif_font_family("DejaVu Serif")
-        settings.set_sans_serif_font_family("DejaVu Sans")
-        settings.set_monospace_font_family("DejaVu Sans Mono")
+        #settings.set_serif_font_family("DejaVu Serif")
+        #settings.set_sans_serif_font_family("DejaVu Sans")
+        #settings.set_monospace_font_family("DejaVu Sans Mono")
         settings.set_default_font_size(14)
         settings.set_minimum_font_size(12)
 
@@ -315,7 +304,7 @@ class mainwindow():
         vbox.pack_start(self.info, False, False, 2)
         info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.info.add(info_box)
-        info_box_label = Gtk.Label("No write since last change. Proceed?")
+        info_box_label = Gtk.Label.new("No write since last change. Proceed?")
         info_box.pack_start(info_box_label, False, False, 3)
         self.info_box_button_ok = Gtk.Button()
         self.info_box_button_ok.set_label("   OK   ")
@@ -660,12 +649,15 @@ class mainwindow():
 
 
     def load_policy(self, webview, decision, decision_type):
-        uri = decision.get_request().get_uri()
-
         if decision_type == WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
-            log.debug("navigation policy for: " + uri)
+            log.debug("navigation policy for:")
+            nav = decision.get_navigation_action()
+            req = nav.get_request()
         if decision_type == WebKit2.PolicyDecisionType.RESPONSE:
-            log.debug("response policy for: " + uri)
+            log.debug("response policy for:")
+            req = decision.get_request()
+        uri = req.get_uri()
+        log.debug(uri)
 
         url = urllib.parse.urlparse(uri)
 
@@ -1352,7 +1344,7 @@ class ConfigParser():
         editor_first = False
         latex_preamble = 
         """
-        self.parser = configparser.SafeConfigParser()
+        self.parser = configparser.ConfigParser()
         self.config = {}
 
     def get_config(self):
@@ -1470,7 +1462,7 @@ if __name__ == "__main__":
         git = False
 
     global loop
-    loop = GObject.MainLoop(None)
+    loop = GLib.MainLoop(None)
 
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
