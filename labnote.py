@@ -69,6 +69,7 @@ import docutils.core
 
 # TODO
 # - git
+#   - write small wrapper
 #   - add file if created by paste
 #   - on ext file open, check if added (only in tree)
 #   - "commit -a" before push on exit?
@@ -76,6 +77,7 @@ import docutils.core
 #     - only commit on own change?
 #   - state in statusbar?
 #   libgit2 via pygit2 ?
+#
 # - quick insert utf8 symbols, arrows etc.
 # - better focus handling
 #   - startup
@@ -86,6 +88,7 @@ import docutils.core
 #
 # rST
 # - latex export emits \href instead of \includegraphics on image, when secifying :target:
+#   - quick fix: remove target before exporting to latex?
 # - rst does not handle spaces in references
 #
 
@@ -1015,7 +1018,8 @@ class mainwindow():
         # docutils: should really use logging
         with devnull():
             try:
-                dtree = docutils.core.publish_doctree(rst)
+                pargs = {"_disable_config": True, "doctitle_xform": False}
+                dtree = docutils.core.publish_doctree(rst, settings_overrides=pargs)
             except docutils.utils.SystemMessage as e:
                 return "<body>Error<br>" + str(e) + "</body>"
 
