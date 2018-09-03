@@ -59,6 +59,7 @@ from gi.repository import WebKit2
 
 # gtksourceview3
 gi.require_version('GtkSource', '3.0')
+#gi.require_version('GtkSource', '4.0')
 from gi.repository import GtkSource
 
 # python-docutils
@@ -299,22 +300,7 @@ class mainwindow():
 
         vbox.pack_start(self.searchr, False, False, 0)
 
-
-        self.info = Gtk.Revealer()
-        vbox.pack_start(self.info, False, False, 2)
-        info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        self.info.add(info_box)
-        info_box_label = Gtk.Label.new("No write since last change. Proceed?")
-        info_box.pack_start(info_box_label, False, False, 3)
-        self.info_box_button_ok = Gtk.Button()
-        self.info_box_button_ok.set_label("   OK   ")
-        self.info_box_button_ok.connect("clicked", self.info_box_button_ok_clicked)
-        info_box.pack_end(self.info_box_button_ok, False, False, 3)
-        info_box_button_cancel = Gtk.Button()
-        info_box_button_cancel.set_label(" Cancel ")
-        info_box_button_cancel.connect("clicked", self.info_box_button_cancel_clicked)
-        info_box.pack_end(info_box_button_cancel, False, False, 0)
-
+        self.info_bar = InfoBar(vbox)
 
         statusbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         vbox.pack_start(statusbar, False, False, 0)
@@ -348,14 +334,9 @@ class mainwindow():
             it = self.tvbuffer.get_iter_at_line(self.lock_line)
             self.textview.scroll_to_iter(it, 0, True, 0.0, 0.0)
 
-    def info_box_button_ok_clicked(self, widget):
+    def load_saved_request(self, request):
         self.tvbuffer.set_modified(False)
-        self.webview.load_uri(self.saved_request)
-        self.info.set_reveal_child(False)
-
-
-    def info_box_button_cancel_clicked(self, widget):
-        self.info.set_reveal_child(False)
+        self.webview.load_uri(request)
 
 
     def window_on_key_press(self, widget, event):
@@ -492,6 +473,28 @@ class mainwindow():
 
             if event.keyval == ord("v"):
                 # handling of clipboard pasting
+
+                # move to drag & drop?
+                if self.clipboard.wait_is_uris_available():
+                    uris = self.clipboard.wait_for_uris()
+                    print(uris)
+                    for uri in uris:
+                        if uri.startswith("file://"):
+                            fp, ext = uri2path(uri, os.path.dirname(self.current_file), startdir)
+                            # TODO
+                            #self.info_bar.ask("", fp,
+                            #                  self.absorb_file, None)
+                            # TODO copy to current dir
+                            #shutil.copy(s, d)
+                            # TODO add to git
+
+                            # and insert reference
+                            if fp.endswith(".pdf"):
+                                print("file ref")
+                            if fp.endswith(".png"):
+                                print("img ref")
+                    return False
+
                 if self.clipboard.wait_is_image_available():
                     # only interact if its an image
                     img = self.clipboard.wait_for_image()
@@ -515,6 +518,7 @@ class mainwindow():
                         break
 
                     img.savev(imgpath, "png", [None], [None])
+                    # TODO add to git
 
                     sel = self.tvbuffer.get_selection_bounds()
                     self.lock()
@@ -739,10 +743,8 @@ class mainwindow():
                     err = GLib.Error("load cancelled: open file modified")
                     request.finish_error(err)
 
-                    self.saved_request = request.get_uri()
-
-                    self.info.set_reveal_child(True)
-                    self.info_box_button_ok.grab_focus()
+                    self.info_bar.ask("No write since last change. Proceed?", request.get_uri(),
+                                      self.load_saved_request, None)
                     return
 
                 self.load_rst(uri, request)
@@ -1315,6 +1317,62 @@ def handle_spaces(rstin):
             line = tl
         rstout += line + "\n"
     return rstout
+
+
+class InfoBar():
+
+    def __init__(self, parent):
+        self.rev = Gtk.Revealer()
+
+        self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.rev.add(self.box)
+
+        self.label = Gtk.Label()
+        self.box.pack_start(self.label, False, False, 2)
+
+        self.button_yes = Gtk.Button()
+        self.button_no = Gtk.Button()
+
+        self.button_yes.set_label("  OK  ")
+        self.button_no.set_label("Cancel")
+
+        self.button_yes.connect("clicked", self.cb_ok)
+        self.button_no.connect("clicked", self.cb_nok)
+
+        self.box.pack_end(self.button_yes, False, False, 1)
+        self.box.pack_end(self.button_no, False, False, 1)
+
+        parent.pack_start(self.rev, False, False, 2)
+
+        self.done()
+
+    # default no
+    def ask(self, question, userdata, cb_yes, cb_no):
+        self.label.set_text(question)
+
+        self.userdata = userdata
+        self.cb_yes = cb_yes
+        self.cb_no = cb_no
+
+        self.rev.set_reveal_child(True)
+        self.button_no.grab_focus()
+
+    def done(self):
+        self.rev.set_reveal_child(False)
+        self.userdata = None
+        self.cb_yes = None
+        self.cb_no = None
+        self.label.set_text("")
+
+    def cb_ok(self, button):
+        if self.cb_yes:
+            self.cb_yes(self.userdata)
+        self.done()
+
+    def cb_nok(self, button):
+        if self.cb_no:
+            self.cb_no(self.userdata)
+        self.done()
 
 
 class devnull():

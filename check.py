@@ -209,6 +209,17 @@ if __name__ == "__main__":
         if f not in refs:
             print(f)
 
+    # search for TODO and FIXME
+    print("")
+    print("files containing TODO or FIXME:")
+    for fp in rst:
+        with open(fp, "r") as f:
+            for (no, line) in enumerate(f):
+                res = re.search("(TODO|FIXME)", line)
+                if res:
+                    #print(fp, "#", no, ":", line)
+                    print("{} in line {}: {}".format(fp, no, line))
+
     print("")
     print("==========")
 
