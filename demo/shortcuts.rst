@@ -10,6 +10,8 @@ Ctrl-s        saves the currently open file
 Ctrl-v        this will not just paste text, but also create image files
               from clipboard data and insert a corresponding reference
 
+              pasting file links allows for copying files directly to notes
+
 Ctrl-l        focus location bar
 
 Ctrl-f        search in current file

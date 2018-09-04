@@ -59,7 +59,7 @@ from gi.repository import WebKit2
 
 # gtksourceview3
 gi.require_version('GtkSource', '3.0')
-#gi.require_version('GtkSource', '4.0')
+#gi.require_version('GtkSource', '4')
 from gi.repository import GtkSource
 
 # python-docutils
@@ -80,10 +80,11 @@ import docutils.core
 #   libgit2 via pygit2
 #   -> write small wrapper for git binary
 #
-# - quick insert utf8 symbols, arrows etc.
+# - better scrolling to current edit
 # - better focus handling
 #   - startup
 #   - after closing searchbar
+# - quick insert utf8 symbols, arrows etc.
 # - fixed size allocation?
 # - reset buffer history on save?
 # - lock loading (ie file change on search)
@@ -461,6 +462,34 @@ class mainwindow():
             log.debug("export failed")
             self.state.set_label("export failed (tex to pdf)")
 
+    def absorb_file(self, src):
+        # copy to current dir
+        current_dir = os.path.dirname(os.path.join(startdir, self.current_file))
+        #if current_dir:
+        #    if not os.path.exists(current_dir):
+        #        os.makedirs(current_dir)
+        try:
+            shutil.copy(src, current_dir + "/")
+        except shutil.SameFileError:
+            self.tvbuffer.insert_at_cursor(src + "\n")
+            return
+        except PermissionError:
+            # TODO notify about errors
+            return
+        except FileNotFoundError:
+            # TODO notify about errors
+            return
+
+        fn = os.path.basename(src)
+        # TODO add to git
+
+        # insert reference
+        (typ, enc) = mimetypes.guess_type(fn)
+        if typ and typ.startswith("image"):
+            self.tvbuffer.insert_at_cursor(".. image:: " + fn + "\n   :target: " + fn + "\n")
+        else:
+            self.tvbuffer.insert_at_cursor("`<" + fn + ">`__\n")
+
     def set_state(self, state):
         GLib.idle_add(self.set_state_cb, state)
 
@@ -477,23 +506,13 @@ class mainwindow():
                 # move to drag & drop?
                 if self.clipboard.wait_is_uris_available():
                     uris = self.clipboard.wait_for_uris()
-                    print(uris)
                     for uri in uris:
                         if uri.startswith("file://"):
-                            fp, ext = uri2path(uri, os.path.dirname(self.current_file), startdir)
-                            # TODO
-                            #self.info_bar.ask("", fp,
-                            #                  self.absorb_file, None)
-                            # TODO copy to current dir
-                            #shutil.copy(s, d)
-                            # TODO add to git
-
-                            # and insert reference
-                            if fp.endswith(".pdf"):
-                                print("file ref")
-                            if fp.endswith(".png"):
-                                print("img ref")
-                    return False
+                            fp = uri[7:]
+                            self.info_bar.ask("Copy file to notes?", fp,
+                                              self.absorb_file, None)
+                            # will add only first uri starting with file
+                            return True
 
                 if self.clipboard.wait_is_image_available():
                     # only interact if its an image
@@ -524,7 +543,7 @@ class mainwindow():
                     self.lock()
                     if sel:
                         self.tvbuffer.delete(sel[0], sel[1])
-                    self.tvbuffer.insert_at_cursor("\n.. image:: " + imgname + "\n   :target: " + imgname + "\n")
+                    self.tvbuffer.insert_at_cursor(".. image:: " + imgname + "\n   :target: " + imgname + "\n")
                     self.unlock()
 
                     return True
