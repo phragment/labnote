@@ -69,16 +69,6 @@ import docutils
 import docutils.core
 
 # TODO
-# - git
-#   - add file if created by paste
-#   - on ext file open, check if added (only in tree)
-#   - "commit -a" before push on exit?
-#     (currently only on file change)
-#     - only commit on own change?
-#   - state in statusbar?
-#
-#   libgit2 via pygit2
-#   -> write small wrapper for git binary
 #
 # - better scrolling to current edit
 # - better focus handling
@@ -349,10 +339,6 @@ class mainwindow():
 
                 self.state_file.set_label("saving")
 
-                #
-                if self.git:
-                    gitadd = bool(os.path.exists(self.current_file))
-
                 filedir = os.path.dirname(self.current_file)
                 if filedir:
                     if not os.path.exists(filedir):
@@ -365,13 +351,8 @@ class mainwindow():
                     self.state_file.set_label("saving failed")
                     return True
 
-                # git, add on new file saved
-                if self.git:
-                    if gitadd:
-                        log.debug("new file saved, going to add file")
-                        (ret, msg) = run(["git", "add", self.current_file])
-                        log.debug(msg)
-
+                # add newly created or changed file to git
+                self.git.add(self.current_file)
                 return True
 
             if event.keyval == ord("l"):
@@ -400,17 +381,16 @@ class mainwindow():
                 log.debug("start export")
                 self.state.set_label("exporting")
 
-                rst = self.tvbuffer.props.text
-
                 meta = {}
                 meta["title"] = self.current_file.replace("_", "\_")  # pylint: disable=anomalous-backslash-in-string
-                if self.git:
-                    meta["rev"] = git_get_rev(self.current_file)
-                else:
-                    meta["rev"] = ""
-                # TODO use git date, use current date only if no git or dirty
-                # git log -1 --date=iso-strict --format=%cd <file>
-                meta["dt"] = datetime.datetime.now().strftime("%Y-%m-%d")
+                meta["rev"] = self.git.get_rev(self.current_file)
+                meta["dt"] = self.git.get_dt(self.current_file)
+
+                # allows for testing without saving
+                rst = self.tvbuffer.props.text
+                if self.tvbuffer.get_modified():
+                    meta["rev"] += " test"
+                    meta["dt"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
                 tex = rst2tex(rst, meta, self.config)
                 if not tex:
@@ -481,7 +461,8 @@ class mainwindow():
             return
 
         fn = os.path.basename(src)
-        # TODO add to git
+        # add copied file to git
+        self.git.add(fn)
 
         # insert reference
         (typ, enc) = mimetypes.guess_type(fn)
@@ -536,8 +517,11 @@ class mainwindow():
                         os.close(imgfd)
                         break
 
+                    # save
                     img.savev(imgpath, "png", [None], [None])
-                    # TODO add to git
+
+                    # add image to git
+                    git.add(imgpath)
 
                     sel = self.tvbuffer.get_selection_bounds()
                     self.lock()
@@ -821,16 +805,10 @@ class mainwindow():
             self.history_ignore = False
         log.debug("history\n" + str(self.history_stack))
 
-
-        ## git, commit on file switch
-        if self.git:
-            if self.current_file:
-                log.debug("committing changes due to file switch")
-                # git commit --allow-empty-message -m '' foo.rst
-                #(ret, msg) = run(["git", "commit", "--allow-empty-message", "-m", "", self.current_file])
-                (ret, msg) = run(["git", "commit", "-a", "--allow-empty-message", "-m", ""])
-                log.debug(msg)
-
+        # commit on file switch
+        # but not directly after loading the first file
+        if self.current_file:
+            self.git.commit()
 
         self.current_file = uri
         log.debug("current file URI " + uri)
@@ -982,14 +960,8 @@ class mainwindow():
 
         self.webview.run_javascript("window.close()", None, None)
 
-        #
-        if self.git:
-            (ret, msg) = run(["git", "ls-remote"])
-            log.debug(msg)
-            # no remotes 128
-            if ret == 0:
-                (ret, msg) = run(["git", "push"])
-                log.debug(msg)
+        self.git.commit()
+        self.git.push()
 
         loop.quit()
 
@@ -1186,6 +1158,7 @@ def rst2tex(rst, meta, conf):
     return tex.decode()
 
 def tex2pdf(tex, srcdir, pdfpath, cb):
+    # TODO handle "no pages of output" on empty doc
     srcdir = os.path.abspath(srcdir)
     pdfpath = os.path.abspath(pdfpath)
 
@@ -1296,25 +1269,6 @@ def run(cmd, stdin=None, cwd=None):
     return proc.returncode, ret
 
 
-def git_get_rev(filename):
-
-    (ret, cnt) = run(["git", "rev-list", "--count", "HEAD"])
-    (ret, hsh) = run(["git", "rev-parse", "--short", "HEAD"])
-    rev = "r" + cnt + "." + hsh
-    (ret, drt) = run(["git", "status", "--porcelain", filename])
-    # ?? untracked
-    log.debug("ret: " + str(ret))
-    log.debug("drt: " + drt)
-    if drt:
-        if "M" in drt.split(" ")[0]:
-            rev += " dirty"
-        else:
-            rev = "untracked"
-    log.debug(rev)
-
-    return rev
-
-
 def handle_spaces(rstin):
     rstout = ""
     reg = re.compile("`.*<.* .*>`_")
@@ -1336,6 +1290,92 @@ def handle_spaces(rstin):
             line = tl
         rstout += line + "\n"
     return rstout
+
+
+class Git():
+
+    def __init__(self, d, log=None):
+        self._log = log
+        # check if d is toplevel dir of git repo
+        self.dir = os.path.normpath(d)
+        gd = os.path.join(self.dir, ".git")
+        if os.path.isdir(gd):
+            self.git = True
+            self._log.debug(self.dir + " is a git root")
+        else:
+            self.git = False
+            self._log.debug(self.dir + " is NO git root")
+
+    def add(self, f):
+        if not self.git:
+            return
+        self._log.debug("git: going to add file")
+        ret, msg = run(["git", "add", f])
+        if ret:
+            self._log.warning(msg)
+        else:
+            self._log.debug(msg)
+
+    def commit(self):
+        if not self.git:
+            return
+        #ret, msg = run(["git", "commit", "-a", "--allow-empty-message", "-m", ""])
+        ret, msg = run(["git", "commit", "--allow-empty-message", "-m", ""])
+        if ret:
+            self._log.warning(msg)
+        else:
+            self._log.debug(msg)
+
+    def push(self):
+        if not self.git:
+            return
+
+        ret, msg = run(["git", "ls-remote"])
+        # 128  no remotes
+        if ret:
+            self._log.warning(msg)
+            return
+        else:
+            self._log.debug(msg)
+
+        ret, msg = run(["git", "push"])
+        if not ret:
+            self._log.debug(msg)
+        else:
+            self._log.error(msg)
+
+    def get_rev(self, f):
+        if not self.git:
+            return ""
+        (ret, cnt) = run(["git", "rev-list", "--count", "HEAD"])
+        (ret, hsh) = run(["git", "rev-parse", "--short", "HEAD"])
+        rev = "r" + cnt + "." + hsh
+        if self.is_dirty(f):
+            rev += " dirty"
+        return rev
+
+    def get_dt(self, f):
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        if not self.git:
+            return now
+        if self.is_dirty(f):
+            return now
+        ret, msg = run(["git", "log", "-1", "--date=short-local", "--format=%cd", f])
+        if not ret:
+            return msg
+        else:
+            return now
+
+    def is_dirty(self, f):
+        if not self.git:
+            return True
+        ret, drt = run(["git", "status", "--porcelain", f])
+        # M   modified
+        # ??  untracked
+        if drt:
+            if drt.startswith("M"):
+                return True
+        return False
 
 
 class InfoBar():
@@ -1530,13 +1570,7 @@ if __name__ == "__main__":
     os.chdir(startdir)
     startfile = os.path.basename(start)
 
-    # check for git, but only if our startdir is a git root
-    if os.path.isdir(startdir + "/.git"):
-        log.debug("startdir is a git root")
-        git = True
-    else:
-        log.debug("startdir is NO git root")
-        git = False
+    git = Git(startdir, log)
 
     global loop
     loop = GLib.MainLoop(None)
