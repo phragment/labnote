@@ -55,7 +55,7 @@ import urllib.parse
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import GObject, Gtk, Pango, Gdk, GLib, Gio
+from gi.repository import Gtk, Gdk, GLib, Gio
 
 gi.require_version('WebKit2', '4.0')
 from gi.repository import WebKit2
@@ -295,17 +295,7 @@ class mainwindow():
 
         self.info_bar = InfoBar(vbox)
 
-        statusbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        vbox.pack_start(statusbar, False, False, 0)
-
-        # TODO rename to msg and add helper functions (ie clearing after 5s)
-        self.state = Gtk.Label()
-        self.state_file = Gtk.Label()
-        self.state_file.set_justify(Gtk.Justification.RIGHT)
-        space = Gtk.Label()
-        statusbar.pack_start(self.state, False, False, 3)
-        statusbar.pack_start(space, True, True, 0)
-        statusbar.pack_start(self.state_file, False, False, 6)
+        self.state = StatusBar(vbox)
 
         self.clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
         self.primary_selection = Gtk.Clipboard.get(Gdk.SELECTION_PRIMARY)
@@ -339,7 +329,7 @@ class mainwindow():
             if event.keyval == ord("s"):
                 log.debug("saving " + self.current_file)
 
-                self.state_file.set_label("saving")
+                self.state.set("file", "saving")
 
                 filedir = os.path.dirname(self.current_file)
                 if filedir:
@@ -348,9 +338,9 @@ class mainwindow():
 
                 if save_file(self.current_file, self.tvbuffer.props.text):
                     self.tvbuffer.set_modified(False)
-                    self.state_file.set_label("saved")
+                    self.state.set("file", "saved")
                 else:
-                    self.state_file.set_label("saving failed")
+                    self.state.set("file", "saving failed")
                     return True
 
                 # add newly created or changed file to git
@@ -381,7 +371,7 @@ class mainwindow():
 
             if event.keyval == ord("E"):
                 log.debug("start export")
-                self.state.set_label("exporting")
+                self.state.set("main", "exporting")
 
                 meta = {}
                 meta["title"] = self.current_file.replace("_", "\_")  # pylint: disable=anomalous-backslash-in-string
@@ -396,7 +386,7 @@ class mainwindow():
 
                 tex = rst2tex(rst, meta, self.config)
                 if not tex:
-                    self.state.set_label("export failed (rst to tex)")
+                    self.state.set("main", "export failed (rst to tex)")
                     return True
 
                 export = threading.Thread(target=tex2pdf,
@@ -438,11 +428,11 @@ class mainwindow():
 
         if not err:
             log.debug("export done")
-            self.state.set_label("export done")
+            self.state.set("main", "export done")
             self.open_uri("/tmp/labnote.pdf")
         else:
             log.debug("export failed")
-            self.state.set_label("export failed (tex to pdf)")
+            self.state.set("main", "export failed (tex to pdf)")
 
     def absorb_file(self, src):
         ## copy to current dir
@@ -457,10 +447,10 @@ class mainwindow():
             self.tvbuffer.insert_at_cursor(src + "\n")
             return
         except PermissionError:
-            # TODO notify about errors
+            self.state.set("main", "could not copy file: permission denied")
             return
         except FileNotFoundError:
-            # TODO notify about errors
+            self.state.set("main", "could not copy file: not found")
             return
 
         fn = os.path.basename(src)
@@ -474,11 +464,6 @@ class mainwindow():
         else:
             self.tvbuffer.insert_at_cursor("`<" + fn + ">`__\n")
 
-    def set_state(self, state):
-        GLib.idle_add(self.set_state_cb, state)
-
-    def set_state_cb(self, state):
-        self.state.set_label(state)
 
     def twv_on_key_press(self, widget, event):
 
@@ -752,10 +737,9 @@ class mainwindow():
                                       self.load_saved_request, None)
                     return
 
+                self.state.clear()
                 self.load_rst(uri, request)
 
-                self.state_file.set_label("")
-                self.state.set_label("")
                 return
 
             self.open_uri(uri)
@@ -812,6 +796,10 @@ class mainwindow():
         if self.current_file:
             self.git.commit()
 
+        # display root dir on first load
+        if not self.current_file:
+            self.state.set("main", startdir)
+
         # set current file
         self.current_file = uri
         log.debug("current file URI " + uri)
@@ -848,7 +836,7 @@ class mainwindow():
         if not self.lock():
             return
 
-        self.state_file.set_label("modified")
+        self.state.set("file", "modified")
 
         self.update_textview()
 
@@ -874,7 +862,7 @@ class mainwindow():
     def buffer_undo(self, manager):
 
         if not self.tvbuffer.get_modified():
-            self.state_file.set_label("")
+            self.state.set("file", "")
 
 
     def go_back(self, widget=None):
@@ -924,7 +912,6 @@ class mainwindow():
 
     # search result activated
     def on_search_result(self, treeview, it, path):
-
         selection = treeview.get_selection()
         (model, pathlist) = selection.get_selected_rows()
         it = model.get_iter(pathlist[0])
@@ -945,7 +932,6 @@ class mainwindow():
 
 
     def on_search_key(self, widget, event):
-
         if event.keyval == Gdk.KEY_Escape:
             self.lock_line = 0
             self.searchr.set_reveal_child(False)
@@ -954,13 +940,22 @@ class mainwindow():
 
 
     def on_delete_event(self, widget, event):
+        self.shutdown()
+        return True
 
+    def on_sigint(self, signum=None, stkframe=None):
         self.shutdown()
 
     def shutdown(self):
-
         log.debug("exiting")
 
+        if self.tvbuffer.get_modified():
+            self.info_bar.ask("Exit without saving?", None, self.shutdown_final, None)
+            return
+
+        self.shutdown_final()
+
+    def shutdown_final(self, userdata=None):
         self.webview.run_javascript("window.close()", None, None)
 
         self.git.commit()
@@ -1161,7 +1156,6 @@ def rst2tex(rst, meta, conf):
     return tex.decode()
 
 def tex2pdf(tex, srcdir, pdfpath, cb):
-    # TODO handle "no pages of output" on empty doc
     srcdir = os.path.abspath(srcdir)
     pdfpath = os.path.abspath(pdfpath)
 
@@ -1175,13 +1169,22 @@ def tex2pdf(tex, srcdir, pdfpath, cb):
     err = True
     for i in range(0, 4):
         (ret, out) = run(["pdflatex", "-halt-on-error", "labnote.tex"], cwd=tmpdir)
+
         if log.isEnabledFor(logging.DEBUG):
+            log.debug("tex returned code " + str(ret))
             log.debug(out)
+
         if ret != 0:
             log.error(out)
             break
-        if "Rerun" in out or "undefined references" in out:
+
+        if "Rerun" in out:
             continue
+        if "undefined references" in out:
+            continue
+        if "No pages of output." in out:
+            continue
+
         else:
             shutil.move(os.path.join(tmpdir, "labnote.pdf"), pdfpath)
             err = False
@@ -1379,6 +1382,33 @@ class Git():
             if drt.startswith("M"):
                 return True
         return False
+
+
+class StatusBar():
+
+    def __init__(self, parent):
+        self.labels = {}
+
+        self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+
+        main = Gtk.Label()
+        f = Gtk.Label()
+
+        self.box.pack_start(main, False, False, 3)
+        self.box.pack_end(f, False, False, 3)
+
+        self.labels["main"] = main
+        self.labels["file"] = f
+
+        parent.pack_start(self.box, False, False, 1)
+
+    def set(self, pos, msg):
+        label = self.labels[pos]
+        label.set_label(msg)
+
+    def clear(self):
+        for label in self.labels:
+            self.labels[label].set_label("")
 
 
 class InfoBar():
@@ -1583,15 +1613,13 @@ if __name__ == "__main__":
     global loop
     loop = GLib.MainLoop(None)
 
+    window = mainwindow(config, git)
+
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    signal.signal(signal.SIGINT, window.on_sigint)
 
-    try:
-        window = mainwindow(config, git)
+    window.history_home = startfile
+    window.load_uri(startfile)
 
-        window.history_home = startfile
-        window.load_uri(startfile)
-
-        loop.run()
-    except KeyboardInterrupt:
-        window.shutdown()
+    loop.run()
 
