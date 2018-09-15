@@ -36,35 +36,36 @@ import urllib
 import urllib.request
 import urllib.parse
 
-# Debian Jessie
-#   python3-gi
-#   gir1.2-webkit2-3.0
-#   gir1.2-gtksource-3.0
-#   python3-docutils
-
+## Packages
 # Arch
-# ttf-dejavu
-
 # python-gobject
+# webkit2gtk
+# gtksourceview4
+# python-docutils
+#   python-pygments (code highlighting)
+#   ttf-droid (better formula view)
+#
+# Debian Stretch
+# python3-gi
+# gir1.2-webkit2-4.0 (2.18)
+# gir1.2-gtksource-3.0 (3.22)
+# python3-docutils
+#   python3-pygments
+#   fonts-dejavu
+
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import GObject, Gtk, Pango, Gdk, GLib, Gio
 
-# webkit2gtk
-try:
-    gi.require_version('WebKit2', '4.0')
-except ValueError:
-    gi.require_version('WebKit2', '3.0')
+gi.require_version('WebKit2', '4.0')
 from gi.repository import WebKit2
 
-# gtksourceview3
-gi.require_version('GtkSource', '3.0')
-#gi.require_version('GtkSource', '4')
+try:
+    gi.require_version('GtkSource', '4')
+except ValueError:
+    gi.require_version('GtkSource', '3.0')
 from gi.repository import GtkSource
 
-# python-docutils
-#   python-pygments (code highlighting)
-#   ttf-droid (better formula view)
 import docutils
 import docutils.core
 
@@ -102,6 +103,7 @@ class mainwindow():
 
         self.deferred_line = 0
 
+        # current file contains path relative to startdir including filename
         self.current_file = ""
 
         self.history_home = ""
@@ -443,11 +445,12 @@ class mainwindow():
             self.state.set_label("export failed (tex to pdf)")
 
     def absorb_file(self, src):
-        # copy to current dir
+        ## copy to current dir
         current_dir = os.path.dirname(os.path.join(startdir, self.current_file))
-        #if current_dir:
-        #    if not os.path.exists(current_dir):
-        #        os.makedirs(current_dir)
+        # create dir if nonexistant
+        if current_dir:
+            if not os.path.exists(current_dir):
+                os.makedirs(current_dir)
         try:
             shutil.copy(src, current_dir + "/")
         except shutil.SameFileError:
@@ -482,15 +485,14 @@ class mainwindow():
         if event.state & Gdk.ModifierType.CONTROL_MASK:
 
             if event.keyval == ord("v"):
-                # handling of clipboard pasting
+                ## handling of clipboard pasting
 
-                # move to drag & drop?
                 if self.clipboard.wait_is_uris_available():
                     uris = self.clipboard.wait_for_uris()
                     for uri in uris:
                         if uri.startswith("file://"):
                             fp = uri[7:]
-                            self.info_bar.ask("Copy file to notes?", fp,
+                            self.info_bar.ask("Copy file to notes? " + fp, fp,
                                               self.absorb_file, None)
                             # will add only first uri starting with file
                             return True
@@ -810,6 +812,7 @@ class mainwindow():
         if self.current_file:
             self.git.commit()
 
+        # set current file
         self.current_file = uri
         log.debug("current file URI " + uri)
 
@@ -1556,18 +1559,23 @@ if __name__ == "__main__":
         start = os.path.expanduser(config["path"])
     log.debug("startpath " + start)
 
-    # try to open default
-    if os.path.isdir(start):
+    # append default filename if directory supplied
+    if not start.endswith(".rst"):
         start = os.path.join(start, "index.rst")
 
     mimetypes.init()
 
     # this adds cwd!
     start = os.path.abspath(start)
+    # startdir is an abs path
     global startdir
     startdir = os.path.dirname(start)
     log.debug("startdir " + startdir)
+
+    if not os.path.isdir(startdir):
+        os.makedirs(startdir)
     os.chdir(startdir)
+
     startfile = os.path.basename(start)
 
     git = Git(startdir, log)
