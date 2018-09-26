@@ -37,6 +37,7 @@ import urllib.request
 import urllib.parse
 
 ## Packages
+#
 # Arch
 # python-gobject
 # webkit2gtk
@@ -66,11 +67,13 @@ except ValueError:
     gi.require_version('GtkSource', '3.0')
 from gi.repository import GtkSource
 
+gi.require_version("Gspell", "1")
+from gi.repository import Gspell
+
 import docutils
 import docutils.core
 
 # TODO
-#
 # - better scrolling to current edit
 # - better focus handling
 #   - startup
@@ -186,6 +189,11 @@ class mainwindow():
         # display all trailing whitespaces
         spacedrawer.set_types_for_locations(GtkSource.SpaceLocationFlags.TRAILING,
                                             GtkSource.SpaceTypeFlags.SPACE)
+
+        # spell checking
+        self.gtv = Gspell.TextView.get_from_gtk_text_view(self.textview)
+        self.gtv.basic_setup()
+        self.gtv.set_inline_spell_checking(False)
 
         self.tvbuffer = self.textview.get_buffer()
         self.tvbuffer.props.language = GtkSource.LanguageManager.get_default().get_language('rst')
@@ -420,6 +428,12 @@ class mainwindow():
                 adj.set_value(scroll * scale)
                 self.textview.set_vadjustment(adj)
                 return True
+
+        if event.keyval == Gdk.KEY_F7:
+            nav = Gspell.NavigatorTextView.new(self.textview)
+            checker = Gspell.CheckerDialog.new(self.window, nav)
+            checker.show()
+            return True
 
         return False
 
