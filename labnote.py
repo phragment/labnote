@@ -56,7 +56,7 @@ import urllib.parse
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GLib, Gio
+from gi.repository import Gtk, Gdk, GLib, Gio, Pango
 
 gi.require_version('WebKit2', '4.0')
 from gi.repository import WebKit2
@@ -79,7 +79,6 @@ import docutils.core
 #   - startup
 #   - after closing searchbar
 # - quick insert utf8 symbols, arrows etc.
-# - fixed size allocation?
 # - reset buffer history on save?
 # - lock loading (ie file change on search)
 #
@@ -87,7 +86,6 @@ import docutils.core
 # - latex export emits \href instead of \includegraphics on image, when secifying :target:
 #   - quick fix: remove target before exporting to latex?
 # - rst does not handle spaces in references
-#
 
 class mainwindow():
 
@@ -165,7 +163,7 @@ class mainwindow():
 
         ## SourceView
         self.textview = GtkSource.View()
-        # TODO set from theme (Gtk.Style) or config
+        # set by system?
         #self.textview.override_font(Pango.FontDescription("DejaVu Sans Mono 10"))
         self.textview.set_monospace(True)
         self.textview.set_tab_width(2)
@@ -234,13 +232,17 @@ class mainwindow():
         # streams for playback."
         settings.set_enable_mediasource(False)
 
-        # TODO set from theme (Gtk.Style) or config
-        #settings.set_default_font_family("DejaVu")
-        #settings.set_serif_font_family("DejaVu Serif")
+        # get from system
+        pcon = self.window.get_pango_context()
+        font = pcon.get_font_description()
+        font_fam = font.get_family()
+        font_size = int(font.get_size() / Pango.SCALE)
+
         #settings.set_sans_serif_font_family("DejaVu Sans")
-        #settings.set_monospace_font_family("DejaVu Sans Mono")
-        settings.set_default_font_size(14)
-        settings.set_minimum_font_size(12)
+        #settings.set_default_font_size(14)
+        settings.set_default_font_family(font_fam)
+        settings.set_default_font_size(font_size + 4)
+        settings.set_minimum_font_size(font_size)
 
 
         context = self.webview.get_context()
@@ -278,8 +280,8 @@ class mainwindow():
         self.search_results_sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.search_results_sw.add(self.treeview)
 
-        # homogeneous, spacing
         hbox = Gtk.Box(orientation=self.config["layout"])
+        hbox.set_homogeneous(True)
         if self.config["editor_first"]:
             # expand, fill, padding
             hbox.pack_start(self.scrolledwindow, True, True, 1)
