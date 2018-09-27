@@ -145,7 +145,8 @@ class mainwindow():
         toolbox.pack_start(self.entry, True, True, 0)
 
         # remove from focus chain
-        #toolbox.set_focus_chain([])
+        tb_back.connect("focus", self.ignore_focus)
+        self.entry.connect("focus", self.ignore_focus)
 
         vbox.pack_start(toolbox, False, False, 0)
 
@@ -303,6 +304,13 @@ class mainwindow():
         self.search_results_sw.hide()
         self.textview.grab_focus()
 
+
+    def ignore_focus(self, wdgt, direction):
+        if direction == Gtk.DirectionType.TAB_FORWARD:
+            self.webview.grab_focus()
+        if direction == Gtk.DirectionType.TAB_BACKWARD:
+            self.textview.grab_focus()
+        return True
 
     def textview_on_size_allocate(self, widget, allocation):
 
@@ -820,6 +828,12 @@ class mainwindow():
         self.tvbuffer.end_not_undoable_action()
         self.tvbuffer.set_modified(False)
         self.tvbuffer.handler_unblock_by_func(self.buffer_changed)
+
+        # place cursor on top
+        it = self.tvbuffer.get_iter_at_line(0)
+        self.tvbuffer.place_cursor(it)
+        # focus textview
+        self.textview.grab_focus()
 
         self.lock_line = 0
         html = self.render(txt)
