@@ -45,6 +45,7 @@ import urllib.parse
 # python-docutils
 #   python-pygments (code highlighting)
 #   ttf-droid (better formula view)
+# gspell
 #
 # Debian Stretch
 # python3-gi
@@ -53,6 +54,7 @@ import urllib.parse
 # python3-docutils
 #   python3-pygments
 #   fonts-dejavu
+# gir1.2-gspell-1
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -73,19 +75,6 @@ from gi.repository import Gspell
 import docutils
 import docutils.core
 
-# TODO
-# - better scrolling to current edit
-# - better focus handling
-#   - startup
-#   - after closing searchbar
-# - quick insert utf8 symbols, arrows etc.
-# - reset buffer history on save?
-# - lock loading (ie file change on search)
-#
-# rST
-# - latex export emits \href instead of \includegraphics on image, when secifying :target:
-#   - quick fix: remove target before exporting to latex?
-# - rst does not handle spaces in references
 
 class mainwindow():
 
@@ -155,6 +144,9 @@ class mainwindow():
         toolbox.pack_start(tb_back, False, False, 0)
         toolbox.pack_start(self.entry, True, True, 0)
 
+        # remove from focus chain
+        #toolbox.set_focus_chain([])
+
         vbox.pack_start(toolbox, False, False, 0)
 
 
@@ -209,27 +201,26 @@ class mainwindow():
 
 
         ## WebKit
-        self.webview = WebKit2.WebView()
+        context = WebKit2.WebContext.new_ephemeral()
+        context.set_cache_model(WebKit2.CacheModel.DOCUMENT_BROWSER)
+
+        context.register_uri_scheme("file", self.uri_scheme_file)
+        for scheme in self.extern:
+            context.register_uri_scheme(scheme, self.uri_scheme_deny)
+
+        self.webview = WebKit2.WebView.new_with_context(context)
 
         settings = self.webview.get_settings()
-        settings.set_enable_javascript(True)
-
+        settings.set_enable_page_cache(False)
         settings.set_allow_file_access_from_file_urls(True)
         settings.set_allow_universal_access_from_file_urls(True)
-        #
-        settings.set_enable_java(False)
-        # flash, pipelight, etc.
+        settings.set_enable_javascript(True)
+
         settings.set_enable_plugins(False)
-        settings.set_enable_page_cache(False)
-        #
+        settings.set_enable_java(False)
         settings.set_enable_webaudio(False)
         settings.set_enable_webgl(False)
-        # "MediaStream is an experimental proposal for allowing
-        # web pages to access audio and video devices for capture."
         settings.set_enable_media_stream(False)
-        # "MediaSource is an experimental proposal which extends
-        # HTMLMediaElement to allow JavaScript to generate media
-        # streams for playback."
         settings.set_enable_mediasource(False)
 
         # get from system
@@ -243,14 +234,6 @@ class mainwindow():
         settings.set_default_font_family(font_fam)
         settings.set_default_font_size(font_size + 4)
         settings.set_minimum_font_size(font_size)
-
-
-        context = self.webview.get_context()
-        context.register_uri_scheme("file", self.uri_scheme_file)
-        for scheme in self.extern:
-            context.register_uri_scheme(scheme, self.uri_scheme_deny)
-        context.set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
-        context.clear_cache()
 
         self.webview.connect("decide-policy", self.load_policy)
         self.webview.connect("context-menu", self.disable_context_menu)
@@ -953,6 +936,7 @@ class mainwindow():
             self.searchr.set_reveal_child(False)
             self.search_results_sw.hide()
             self.webview.show()
+            self.textview.grab_focus()
 
 
     def on_delete_event(self, widget, event):
@@ -1036,8 +1020,8 @@ class mainwindow():
                 if elem.tagname in blacklist:
                     continue
                 else:
-                    log.debug("insert mark into " + elem.tagname)
-                    elem.insert(0, node_mark)
+                    log.debug("append mark to: " + elem.tagname)
+                    elem += node_mark
                     break
 
             # more debug
