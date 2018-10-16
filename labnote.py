@@ -756,9 +756,12 @@ class mainwindow():
 
         if self.load_state == 1:
             (typ, enc) = mimetypes.guess_type(uri)
-            log.debug(typ)
+            log.debug("filetype: " + str(typ))
             if typ and typ.startswith("image"):
                 self.load_img(uri, request)
+            else:
+                err = GLib.Error("load cancelled: unknown img format")
+                request.finish_error(err)
             return
 
 
@@ -770,7 +773,11 @@ class mainwindow():
             ret = subprocess.call(["/usr/bin/xdg-open", uri],
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if ret != 0:
-            log.warning("could not be opened")
+            # 1 Error in command line syntax.
+            # 2 One of the files passed on the command line did not exist.
+            # 3 A required tool could not be found.
+            # 4 The action failed.
+            log.error("could not be opened, xdg-open reports: " + str(ret))
 
 
     def load_img(self, uri, request):
@@ -1022,28 +1029,39 @@ class mainwindow():
 
         dtree = self.dtree_prep(dtree)
 
+        # scroll to current edit
         if lock or self.lock_line:
-            prev = []
+
+            elements = []
             for elem in dtree.traverse(siblings=True):
-                if elem.line:
-                    if elem.line >= line:
-                        break
-                    prev.append(elem)
-            blacklist = ["math_block"]
-            for elem in reversed(prev):
+                if not elem.line:
+                    continue
+                # currently edited line is <= to start line of element
+                if elem.line > line:
+                    break
+                elements.append(elem)
+
+            # we want to insert scroll mark in front of currently edited elemet
+            if elements:
+                elements.pop()
+            # appending can not work
+            blacklist = ["comment", "math_block", "section",
+                         "field", "line_block", "footnote",
+                         "bullet_list", "enumerated_list",
+                         "definition_list_item", "substitution_definition"]
+
+            for elem in reversed(elements):
                 if elem.tagname in blacklist:
                     continue
-                else:
-                    log.debug("append mark to: " + elem.tagname)
-                    elem += node_mark
-                    break
+                log.debug("append mark to: " + elem.tagname)
+                elem += node_mark
+                break
 
-            # more debug
-            if log.isEnabledFor(logging.DEBUG):
-                pretty = docutils.core.publish_from_doctree(dtree, writer_name="pseudoxml")
-
-                with open("/tmp/labnote.dtree", "w") as f:
-                    f.write(pretty.decode())
+        # more debug
+        if log.isEnabledFor(logging.DEBUG):
+            pretty = docutils.core.publish_from_doctree(dtree, writer_name="pseudoxml")
+            with open("/tmp/labnote.dtree", "w") as f:
+                f.write(pretty.decode())
 
         with devnull():
             try:
@@ -1062,7 +1080,6 @@ class mainwindow():
         script += r"""
         function update()
         {
-            //var max = document.body.scrollHeight - window.innerHeight + 30;
             var max = document.body.scrollHeight - window.innerHeight;
             document.title = window.pageYOffset / max;
         }

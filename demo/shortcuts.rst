@@ -28,5 +28,7 @@ Alt-Up        go up to start directory
 
 Alt-Down      scroll editor to current view position
               (view position is synced to editor during typing)
+
+F7            check spelling
 ============  ===============
 

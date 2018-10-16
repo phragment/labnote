@@ -32,7 +32,7 @@ Git
 
 LabNote supports versioning.
 Simply run **git init** in your notes folder LabNote will automatically
-commit changes upon changing between files and pushed upon exit.
+commit changes upon changing between files and push upon exit.
 
 
 rST Demos
@@ -65,4 +65,5 @@ LabNote uses:
 - `GtkSourceView <https://wiki.gnome.org/Projects/GtkSourceView>`__
 - `Docutils <http://docutils.sourceforge.net/>`__
 - `WebKit2Gtk+ <https://webkitgtk.org/>`__
+- `Gspell <https://wiki.gnome.org/Projects/gspell>`__
 
