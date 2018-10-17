@@ -1517,7 +1517,7 @@ class ConfigParser():
 
         self.default = """
         [labnote]
-        default_path = ~/notes/index.rst
+        default_path = 
         sourceview_scheme = default
         webview_style = 
         math_style = 
@@ -1532,27 +1532,32 @@ class ConfigParser():
 
         self.parser.read_string(self.default)
 
-        config_home = os.getenv("XDG_CONFIG_HOME")
-        if not config_home:
-            config_home = os.path.expanduser("~/.config")
+        config_dirs = []
+        config_dirs.append(os.getenv("XDG_CONFIG_HOME"))
+        config_dirs.append(os.path.expanduser("~/.config"))
+        config_dirs.append("/etc")
 
-        config_dir = os.path.join(config_home, "labnote")
-        config_path = os.path.join(config_dir, "config.ini")
+        for config_dir in config_dirs:
+            if not config_dir:
+                continue
+            config_dir = os.path.join(config_dir, "labnote")
+            config_path = os.path.join(config_dir, "config.ini")
+            if os.path.exists(config_path):
+                break
 
+        log.debug("reading config from " + config_path)
         try:
-            config_file = open(config_path, "r+")
+            config_file = open(config_path, "r")
             self.parser.read_file(config_file)
             config_file.close()
         except FileNotFoundError:
-            if not os.path.exists(config_dir):
-                os.makedirs(config_dir)
-            config_file = open(config_path, "w")
-            self.parser.write(config_file)
-            config_file.close()
+            log.warning("config file not found " + config_path)
 
         default_path = self.parser.get("labnote", "default_path")
         if default_path:
             self.config["path"] = default_path
+        else:
+            self.config["path"] = None
 
         layout_vertical = self.parser.getboolean("labnote", "layout_vertical")
         if layout_vertical:
@@ -1617,7 +1622,11 @@ if __name__ == "__main__":
     if args.path:
         start = os.path.expanduser(args.path)
     else:
-        start = os.path.expanduser(config["path"])
+        if config["path"]:
+            start = os.path.expanduser(config["path"])
+        else:
+            log.error("no file specified")
+            sys.exit()
     log.debug("startpath " + start)
 
     # append default filename if directory supplied

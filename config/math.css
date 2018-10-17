@@ -23,8 +23,7 @@
 	text-align: center;
 	font-family: "Droid Serif", "DejaVu Serif", "STIX", serif;
 	margin: 1.2em 0;
-	/* more spacing */
-	letter-spacing: 2px;
+	letter-spacing: 2px;  /* more spacing */
 }
 span.formula {
 	white-space: nowrap;
