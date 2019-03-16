@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2016-2018 Thomas Krug
+# Copyright 2016-2019 Thomas Krug
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -45,6 +45,7 @@ import urllib.parse
 #   python-pygments (code highlighting)
 #   ttf-droid (better formula view)
 # gspell
+# texlive-most (latex, pdf export)
 #
 # Debian Stretch
 # python3-gi
@@ -119,7 +120,15 @@ class mainwindow():
         self.window.set_default_icon_list(icon_list)
 
         # size & position
-        self.window.set_size_request(1400, 800)
+        screen = self.window.get_screen()
+        display = screen.get_display()
+        # TODO choose correct monitor
+        #monitor = display.get_monitor(0)
+        #cursor =
+        #monitor = display.get_monitor_at_point(cursor.x, cursor.y)
+        monitor = display.get_primary_monitor()
+        size = monitor.get_geometry()
+        self.window.set_size_request(int(size.width * 0.8), int(size.height * 0.8))
         self.window.set_position(Gtk.WindowPosition.CENTER)
 
 
@@ -846,10 +855,10 @@ class mainwindow():
         self.lock_line = 0
         html = self.render(txt)
 
-        html = html.encode("latin-1", errors="xmlcharrefreplace")
+        html = html.encode()
 
         stream = Gio.MemoryInputStream.new_from_data(html)
-        request.finish(stream, -1, None)
+        request.finish(stream, len(html), "text/html")
 
 
     def buffer_changed(self, textbuf):

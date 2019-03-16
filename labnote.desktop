@@ -1,9 +1,11 @@
 [Desktop Entry]
 Name=LabNote
-Comment=
+Comment=reStructuredText based desktop wiki and editor
 Exec=labnote
 Terminal=false
 Type=Application
 Icon=text-x-generic-symbolic
 Categories=Utility;TextEditor;
 StartupNotify=false
+#MimeType=text/x-rst;text/plain;
+MimeType=text/x-rst;
