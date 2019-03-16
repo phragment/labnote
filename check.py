@@ -26,6 +26,14 @@ import docutils
 import docutils.core
 import docutils.utils
 
+# TODO
+#
+# git gc
+# git fsck
+#
+# dangling blobs
+# git reflog expire --expire=now --all
+# git gc --prune=now
 
 def ref2path(ref, curdir, startdir):
 

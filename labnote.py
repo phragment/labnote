@@ -33,7 +33,6 @@ import tempfile
 import threading
 import time
 import urllib
-import urllib.request
 import urllib.parse
 
 ## Packages
@@ -441,7 +440,8 @@ class mainwindow():
             log.debug("export failed")
             self.state.set("main", "export failed (tex to pdf)")
 
-    def absorb_file(self, src):
+    def absorb_file(self, uri):
+        src = urllib.parse.unquote(uri, encoding="utf-8", errors="replace")
         ## copy to current dir
         current_dir = os.path.dirname(os.path.join(startdir, self.current_file))
         # create dir if nonexistant
@@ -461,8 +461,9 @@ class mainwindow():
             return
 
         fn = os.path.basename(src)
+        # TODO only on file save?
         # add copied file to git
-        self.git.add(fn)
+        self.git.add(os.path.join(current_dir, fn))
 
         # insert reference
         (typ, enc) = mimetypes.guess_type(fn)
@@ -724,7 +725,7 @@ class mainwindow():
         log.debug("state " + str(self.load_state))
 
         # handle non ascii
-        uri = urllib.request.unquote(uri)
+        uri = urllib.parse.unquote(uri, encoding="utf-8", errors="replace")
         # handle spaces in links
         uri = uri.replace(rechar, " ")
 
@@ -1300,7 +1301,7 @@ def run(cmd, stdin=None, cwd=None):
     except subprocess.TimeoutExpired:
         proc.kill()
         (out, err) = proc.communicate()
-    ret = out.decode().strip()
+    ret = out.decode(errors="replace").strip()
     if not ret:
         ret = err.decode().strip()
     return proc.returncode, ret
